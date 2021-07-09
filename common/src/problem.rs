@@ -39,6 +39,12 @@ pub enum FromFileError {
     Deserialize(serde_json::Error),
 }
 
+#[derive(Debug)]
+pub enum WriteFileError {
+    CreateFile(io::Error),
+    Serialize(serde_json::Error),
+}
+
 impl Problem {
     pub fn from_file<P>(filename: P) -> Result<Problem, FromFileError> where P: AsRef<Path> {
         let file = fs::File::open(filename)
@@ -46,5 +52,21 @@ impl Problem {
         let reader = io::BufReader::new(file);
         serde_json::from_reader(reader)
             .map_err(FromFileError::Deserialize)
+    }
+
+    pub fn export_pose(&self) -> Pose {
+        Pose {
+            vertices: self.figure.vertices.clone(),
+        }
+    }
+}
+
+impl Pose {
+    pub fn write_to_file<P>(&self, filename: P) -> Result<(), WriteFileError> where P: AsRef<Path> {
+        let file = fs::File::create(filename)
+            .map_err(WriteFileError::CreateFile)?;
+        let writer = io::BufWriter::new(file);
+        serde_json::to_writer(writer, self)
+            .map_err(WriteFileError::Serialize)
     }
 }

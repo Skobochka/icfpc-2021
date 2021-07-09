@@ -178,6 +178,54 @@ impl Env {
 
         Ok(())
     }
+
+    pub fn move_figure_left(&mut self) {
+        for point in &self.problem.figure.vertices {
+            if point.0 < 1 {
+                return;
+            }
+        }
+        for point in &mut self.problem.figure.vertices {
+            point.0 -= 1;
+        }
+    }
+
+    pub fn move_figure_right(&mut self) {
+        for point in &self.problem.figure.vertices {
+            if point.0 + 1 > self.max_x as i64 {
+                return;
+            }
+        }
+        for point in &mut self.problem.figure.vertices {
+            point.0 += 1;
+        }
+    }
+
+    pub fn move_figure_upper(&mut self) {
+        for point in &self.problem.figure.vertices {
+            if point.1 < 1 {
+                return;
+            }
+        }
+        for point in &mut self.problem.figure.vertices {
+            point.1 -= 1;
+        }
+    }
+
+    pub fn move_figure_lower(&mut self) {
+        for point in &self.problem.figure.vertices {
+            if point.1 + 1 > self.max_x as i64 {
+                return;
+            }
+        }
+        for point in &mut self.problem.figure.vertices {
+            point.1 += 1;
+        }
+    }
+
+    pub fn export_solution(&self) -> problem::Pose {
+        self.problem.export_pose()
+    }
 }
 
 impl ViewportTranslator {

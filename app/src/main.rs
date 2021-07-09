@@ -62,6 +62,7 @@ pub enum Error {
     EnvDraw(env::DrawError),
     PistonWindowCreate(Box<dyn std::error::Error>),
     PistonDraw2d(Box<dyn std::error::Error>),
+    PoseExport(problem::WriteFileError),
 }
 
 fn main() -> Result<(), Error> {
@@ -89,7 +90,7 @@ fn main() -> Result<(), Error> {
     let mut glyphs = Glyphs::new(&font_path, window.create_texture_context(), TextureSettings::new())
         .map_err(Error::GlyphsCreate)?;
 
-    let env =
+    let mut env =
         env::Env::new(
             problem,
             cli_args.screen_width,
@@ -104,12 +105,12 @@ fn main() -> Result<(), Error> {
             use piston_window::{clear, text, line, Transformed};
             clear([0.0, 0.0, 0.0, 1.0], g2d);
 
-            text::Text::new_color([0.0, 1.0, 0.0, 2.0], 16)
+            text::Text::new_color([0.0, 1.0, 0.0, 1.0], 16)
                 .draw(
                     &env.console_text(),
                     &mut glyphs,
                     &context.draw_state,
-                    context.transform.trans(5.0, 20.0),
+                    context.transform.trans_pos([5.0, 20.0]),
                     g2d,
                 )
                 .map_err(From::from)
@@ -135,6 +136,20 @@ fn main() -> Result<(), Error> {
         match event.press_args() {
             Some(Button::Keyboard(Key::Q)) =>
                 break,
+            Some(Button::Keyboard(Key::A)) =>
+                env.move_figure_left(),
+            Some(Button::Keyboard(Key::D)) =>
+                env.move_figure_right(),
+            Some(Button::Keyboard(Key::W)) =>
+                env.move_figure_upper(),
+            Some(Button::Keyboard(Key::S)) =>
+                env.move_figure_lower(),
+            Some(Button::Keyboard(Key::E)) => {
+                let pose = env.export_solution();
+                pose.write_to_file(&cli_args.common.pose_file)
+                    .map_err(Error::PoseExport)?;
+                log::info!("pose {:?} has been written to {:?}", pose, cli_args.common.pose_file);
+            },
             _ =>
                 (),
         }
