@@ -1,6 +1,7 @@
 use std::{
     io,
     path::PathBuf,
+    path::Path,
 };
 
 use structopt::{
@@ -50,6 +51,9 @@ pub struct CliArgs {
     /// window initial screen height in pixels
     #[structopt(long = "screen-height", default_value = "320")]
     pub screen_height: u32,
+    /// do not load pose
+    #[structopt(long = "no-pose-load")]
+    pub no_pose_load: bool,
 }
 
 #[derive(Debug)]
@@ -98,6 +102,14 @@ fn main() -> Result<(), Error> {
             cli_args.border_width,
         )
         .map_err(Error::EnvCreate)?;
+
+    if !cli_args.no_pose_load && Path::exists(&cli_args.common.pose_file) {
+        let pose = problem::Pose::from_file(&cli_args.common.pose_file)
+            .map_err(Error::ProblemLoad)?;
+
+        env.import_solution(pose);
+    }
+
 
     while let Some(event) = window.next() {
         let maybe_result = window.draw_2d(&event, |context, g2d, device| {
