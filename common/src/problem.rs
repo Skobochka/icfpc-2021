@@ -73,7 +73,8 @@ pub enum GeoExportError {
 
 #[derive(Debug)]
 pub enum GeoImportError {
-
+    EdgesMismatch { expected: usize, provided: usize, },
+    PointsInEdgeMismatch { expected: usize, provided: usize, },
 }
 
 impl Figure {
@@ -96,8 +97,39 @@ impl Figure {
     }
 
     pub fn import_from_geo(&mut self, geo_figure: geo::MultiLineString<f64>) -> Result<(), GeoImportError> {
+        if geo_figure.0.len() != self.edges.len() {
+            return Err(GeoImportError::EdgesMismatch {
+                expected: self.edges.len(),
+                provided: geo_figure.0.len(),
+            });
+        }
 
-        todo!()
+        for (multi_line, edge) in geo_figure.into_iter().zip(self.edges.iter()) {
+            let mut points_iter = multi_line.points_iter();
+            let source_point = points_iter.next()
+                .ok_or(GeoImportError::PointsInEdgeMismatch {
+                    expected: 2,
+                    provided: 0,
+                })?;
+            let target_point = points_iter.next()
+                .ok_or(GeoImportError::PointsInEdgeMismatch {
+                    expected: 2,
+                    provided: 1,
+                })?;
+            if !points_iter.next().is_none() {
+                return Err(GeoImportError::PointsInEdgeMismatch {
+                    expected: 2,
+                    provided: 3,
+                });
+            }
+
+            self.vertices[edge.0].0 = source_point.x() as i64;
+            self.vertices[edge.0].1 = source_point.y() as i64;
+            self.vertices[edge.1].0 = target_point.x() as i64;
+            self.vertices[edge.1].1 = target_point.y() as i64;
+        }
+
+        Ok(())
     }
 }
 
