@@ -167,7 +167,10 @@ impl From<&Point> for geo::Coordinate<i64> {
 
 impl geo::algorithm::contains::Contains<Point> for geo::Polygon<i64> {
     fn contains(&self, point: &Point) -> bool {
-        self.contains(&geo::Coordinate::from(point))
+        let geo_point = geo::Coordinate::from(point);
+
+        // Present either inside polygon or on it's boundaries
+        self.exterior().contains(&geo_point) || self.contains(&geo_point)
     }
 }
 
@@ -212,6 +215,12 @@ mod tests {
         assert_eq!(hole1.contains(&geo::Point::from(Point(5, 5))), true);
         assert_eq!(hole1.contains(&Point(20, 20)), false);
         assert_eq!(hole1.contains(&Point(5, 5)), true);
+
+        // check corners
+        assert_eq!(hole1.contains(&Point(0, 0)), true);
+        assert_eq!(hole1.contains(&Point(10, 0)), true);
+        assert_eq!(hole1.contains(&Point(10, 10)), true);
+        assert_eq!(hole1.contains(&Point(0, 10)), true);
 
     }
 }
