@@ -157,7 +157,7 @@ impl Env {
     }
 
     pub fn console_text(&self) -> String {
-        format!("hello")
+        format!("move: W/A/S/D, rotate: Z/X, export pose: E")
     }
 
     pub fn draw<DF>(&self, mut draw_element: DF) -> Result<(), DrawError> where DF: FnMut(draw::DrawElement) {
