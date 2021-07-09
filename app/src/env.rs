@@ -45,6 +45,7 @@ pub struct Env {
     max_y: f64,
     mouse_cursor: Option<[f64; 2]>,
     mirror_state: MirrorState,
+    score_state: ScoringState,
 }
 
 #[derive(Debug)]
@@ -86,6 +87,16 @@ pub enum RotateError {
     GeoImport(problem::GeoImportError),
     NoCentroidBuilt,
 }
+
+#[derive(Debug)]
+enum ScoringState {
+    Unscored,
+    Ok(i64),
+    VerticeCountMismatch,
+    BrokenEdgesFound(Vec<problem::Edge>),
+    EdgesNotFitHole(Vec<problem::Edge>),
+}
+
 
 impl Env {
     pub fn new(
@@ -163,6 +174,7 @@ impl Env {
             max_y: if max_y_hole < max_y_figure { max_y_figure } else { max_y_hole } as f64,
             mouse_cursor: None,
             mirror_state: MirrorState::WantStart,
+            score_state: ScoringState::Unscored,
         })
     }
 
@@ -187,7 +199,7 @@ impl Env {
 
     pub fn console_text(&self) -> String {
         format!(
-            "move: W/A/S/D, rotate: Z/X, export pose: E, mirror: {}",
+            "move: W/A/S/D, rotate: Z/X, export pose: E, mirror: {}, {}",
             match self.mirror_state {
                 MirrorState::WantStart |
                 MirrorState::WantStartHighlight { .. } =>
@@ -202,7 +214,15 @@ impl Env {
                 MirrorState::LineGotHighlight { ref pending_mirror, .. } =>
                     format!("line READY (N to apply {} vertices, M to reset)", pending_mirror.len()),
             },
-        )
+
+            match &self.score_state {
+                ScoringState::Unscored => "<unscored>".to_string(),
+                ScoringState::Ok(score) => format!("score: {}", score),
+                ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
+                ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
+                ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
+            },
+            )
     }
 
     pub fn draw<DF>(&mut self, tr: &ViewportTranslator, mut draw_element: DF) -> Result<(), DrawError> where DF: FnMut(draw::DrawElement) {
@@ -495,7 +515,25 @@ impl Env {
     }
 
     pub fn import_solution(&mut self, pose: problem::Pose) {
-        self.problem.import_pose(pose);
+        let score = self.problem.import_pose(pose);
+        match score {
+            Ok(score_value) => {
+                log::debug!(" ;; pose loaded successfully, score: {:?}", score);
+                self.score_state = ScoringState::Ok(score_value);
+            },
+            Err(problem::PoseValidationError::VerticeCountMismatch) => {
+                log::debug!(" ;; pose load failure, vertice mismatch");
+                self.score_state = ScoringState::VerticeCountMismatch;
+            },
+            Err(problem::PoseValidationError::BrokenEdgesFound(edges)) => {
+                log::debug!(" ;; pose load failure, broken edges found");
+                self.score_state = ScoringState::BrokenEdgesFound(edges);
+            },
+            Err(problem::PoseValidationError::EdgesNotFitHole(edges)) => {
+                log::debug!(" ;; pose load failure, edges not fitting hole found");
+                self.score_state = ScoringState::EdgesNotFitHole(edges);
+            },
+        }
     }
 
     pub fn export_solution(&self) -> problem::Pose {

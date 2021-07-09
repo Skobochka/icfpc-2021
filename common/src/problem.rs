@@ -6,6 +6,9 @@ use std::{
 
 use geo::{
     algorithm::{
+        contains::{
+            Contains,
+        },
         centroid::{
             Centroid,
         },
@@ -53,6 +56,13 @@ pub enum WriteFileError {
     Serialize(serde_json::Error),
 }
 
+#[derive(Debug)]
+pub enum PoseValidationError {
+    VerticeCountMismatch,
+    BrokenEdgesFound(Vec<Edge>),
+    EdgesNotFitHole(Vec<Edge>),
+}
+
 impl Problem {
     pub fn from_file<P>(filename: P) -> Result<Problem, FromFileError> where P: AsRef<Path> {
         let file = fs::File::open(filename)
@@ -68,12 +78,68 @@ impl Problem {
         }
     }
 
-    pub fn import_pose(&mut self, pose: Pose) {
+    pub fn import_pose(&mut self, pose: Pose) -> Result<i64, PoseValidationError> {
+        let score = self.score_pose(&pose)?;
         self.figure.vertices = pose.vertices;
+        Ok(score)
     }
 
     pub fn hole_polygon(&self) -> geo::Polygon<i64> {
         geo::Polygon::new(self.hole.clone().into(), vec![])
+    }
+
+    pub fn hole_polygon_f64(&self) -> geo::Polygon<f64> {
+        geo::Polygon::new(self.hole.clone().into(), vec![])
+    }
+
+    pub fn score_pose(&self, pose: &Pose) -> Result<i64, PoseValidationError> {
+        // Check (a): connectivity. As our app does not change include edges in Pose,
+        // we just check that the new Pose inclues the same number of vertices as the original
+        if self.figure.vertices.len() != pose.vertices.len() {
+            return Err(PoseValidationError::VerticeCountMismatch)
+        }
+
+        // Check stretching
+        let vertices_buf: Vec<(&Point, &Point)> = self.figure.vertices.iter().zip(pose.vertices.iter()).collect();
+        let broken_edges: Vec<Edge> = self.figure.edges.iter().filter(|edge| {
+            match edge {
+                Edge(from_idx, to_idx) => {
+                    let d_before = distance(vertices_buf[*from_idx].0, vertices_buf[*to_idx].0);
+                    let d_after = distance(vertices_buf[*from_idx].1, vertices_buf[*to_idx].1);
+
+                    ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64
+                }
+            }
+        }).map(|item| item.clone()).collect();
+        if broken_edges.len() > 0 {
+            return Err(PoseValidationError::BrokenEdgesFound(broken_edges));
+        }
+
+        // Check hole
+        let geo_hole = self.hole_polygon_f64();
+        let edges_out_of_hole: Vec<Edge> = self.figure.edges.iter()
+            .filter_map(|edge| {
+                let Edge(from_idx, to_idx) = edge;
+                let geo_edge = geo::Line {
+                    start: geo::Coordinate::from(pose.vertices[*from_idx]),
+                    end: geo::Coordinate::from(pose.vertices[*to_idx])
+                };
+                if geo_hole.contains(&geo_edge) {
+                    None
+                }
+                else {
+                    Some(edge)
+                }
+            }).map(|item| item.clone()).collect();
+        if edges_out_of_hole.len() > 0 {
+            return Err(PoseValidationError::EdgesNotFitHole(edges_out_of_hole));
+        }
+
+        let dislikes = self.hole.iter().map(|hole_vert| {
+            self.figure.vertices.iter().map(|pose_vert| distance(hole_vert, pose_vert)).min().unwrap()
+        }).sum();
+
+        Ok(dislikes)
     }
 }
 
@@ -159,6 +225,12 @@ impl From<Point> for geo::Coordinate<i64> {
     }
 }
 
+impl From<Point> for geo::Coordinate<f64> {
+    fn from(point: Point) -> Self {
+        geo::Coordinate::<f64> { x: point.0 as f64, y: point.1 as f64 }
+    }
+}
+
 impl From<&Point> for geo::Coordinate<i64> {
     fn from(point: &Point) -> Self {
         geo::Coordinate::<i64> { x: point.0, y: point.1 }
@@ -172,6 +244,10 @@ impl geo::algorithm::contains::Contains<Point> for geo::Polygon<i64> {
         // Present either inside polygon or on it's boundaries
         self.exterior().contains(&geo_point) || self.contains(&geo_point)
     }
+}
+
+pub fn distance(p: &Point, q: &Point) -> i64 {
+    (p.0 - q.0) * (p.0 - q.0) + (p.1 - q.1) * (p.1 - q.1)
 }
 
 

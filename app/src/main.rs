@@ -71,6 +71,7 @@ pub enum Error {
     PistonWindowCreate(Box<dyn std::error::Error>),
     PistonDraw2d(Box<dyn std::error::Error>),
     PoseExport(problem::WriteFileError),
+    PoseScoring(problem::PoseValidationError),
 }
 
 fn main() -> Result<(), Error> {
@@ -112,7 +113,7 @@ fn main() -> Result<(), Error> {
         let pose = problem::Pose::from_file(&cli_args.common.pose_file)
             .map_err(Error::ProblemLoad)?;
 
-        env.import_solution(pose);
+        env.import_solution(pose)
     }
 
 
