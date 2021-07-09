@@ -58,7 +58,7 @@ pub enum WriteFileError {
 
 #[derive(Debug)]
 pub enum PoseValidationError {
-    VericeCountMismatch,
+    VerticeCountMismatch,
     BrokenEdgesFound(Vec<Edge>),
     EdgesNotFitHole(Vec<Edge>),
 }
@@ -78,8 +78,10 @@ impl Problem {
         }
     }
 
-    pub fn import_pose(&mut self, pose: Pose) {
+    pub fn import_pose(&mut self, pose: Pose) -> Result<i64, PoseValidationError> {
+        let score = self.score_pose(&pose)?;
         self.figure.vertices = pose.vertices;
+        Ok(score)
     }
 
     pub fn hole_polygon(&self) -> geo::Polygon<i64> {
@@ -90,11 +92,11 @@ impl Problem {
         geo::Polygon::new(self.hole.clone().into(), vec![])
     }
 
-    pub fn score_pose<'a>(&self, pose: &'a Pose) -> Result<i64, PoseValidationError> {
+    pub fn score_pose(&self, pose: &Pose) -> Result<i64, PoseValidationError> {
         // Check (a): connectivity. As our app does not change include edges in Pose,
         // we just check that the new Pose inclues the same number of vertices as the original
         if self.figure.vertices.len() != pose.vertices.len() {
-            return Err(PoseValidationError::VericeCountMismatch)
+            return Err(PoseValidationError::VerticeCountMismatch)
         }
 
         // Check stretching
@@ -130,7 +132,7 @@ impl Problem {
                 }
             }).map(|item| item.clone()).collect();
         if edges_out_of_hole.len() > 0 {
-            return Err(PoseValidationError::EdgesNotFitHole(broken_edges));
+            return Err(PoseValidationError::EdgesNotFitHole(edges_out_of_hole));
         }
 
         Ok(0)

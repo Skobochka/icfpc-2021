@@ -30,6 +30,7 @@ pub struct Env {
     min_y: f64,
     max_x: f64,
     max_y: f64,
+    score_state: ScoringState,
 }
 
 pub struct ViewportTranslator {
@@ -61,6 +62,16 @@ pub enum RotateError {
     GeoImport(problem::GeoImportError),
     NoCentroidBuilt,
 }
+
+#[derive(Debug)]
+enum ScoringState {
+    Unscored,
+    Ok(i64),
+    VerticeCountMismatch,
+    BrokenEdgesFound(Vec<problem::Edge>),
+    EdgesNotFitHole(Vec<problem::Edge>),
+}
+
 
 impl Env {
     pub fn new(
@@ -136,6 +147,7 @@ impl Env {
             min_y: if min_y_hole > min_y_figure { min_y_figure } else { min_y_hole } as f64,
             max_x: if max_x_hole < max_x_figure { max_x_figure } else { max_x_hole } as f64,
             max_y: if max_y_hole < max_y_figure { max_y_figure } else { max_y_hole } as f64,
+            score_state: ScoringState::Unscored,
         })
     }
 
@@ -159,7 +171,15 @@ impl Env {
     }
 
     pub fn console_text(&self) -> String {
-        format!("move: W/A/S/D, rotate: Z/X, export pose: E")
+        format!(
+            "move: W/A/S/D, rotate: Z/X, export pose: E, {}",
+            match &self.score_state {
+                ScoringState::Unscored => "<unscored>".to_string(),
+                ScoringState::Ok(score) => format!("score: {}", score),
+                ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
+                ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
+                ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
+            })
     }
 
     pub fn draw<DF>(&self, mut draw_element: DF) -> Result<(), DrawError> where DF: FnMut(draw::DrawElement) {
@@ -281,7 +301,25 @@ impl Env {
     }
 
     pub fn import_solution(&mut self, pose: problem::Pose) {
-        self.problem.import_pose(pose);
+        let score = self.problem.import_pose(pose);
+        match score {
+            Ok(score_value) => {
+                log::debug!(" ;; pose loaded successfully, score: {:?}", score);
+                self.score_state = ScoringState::Ok(score_value);
+            },
+            Err(problem::PoseValidationError::VerticeCountMismatch) => {
+                log::debug!(" ;; pose load failure, vertice mismatch");
+                self.score_state = ScoringState::VerticeCountMismatch;
+            },
+            Err(problem::PoseValidationError::BrokenEdgesFound(edges)) => {
+                log::debug!(" ;; pose load failure, broken edges found");
+                self.score_state = ScoringState::BrokenEdgesFound(edges);
+            },
+            Err(problem::PoseValidationError::EdgesNotFitHole(edges)) => {
+                log::debug!(" ;; pose load failure, edges not fitting hole found");
+                self.score_state = ScoringState::EdgesNotFitHole(edges);
+            },
+        }
     }
 
     pub fn export_solution(&self) -> problem::Pose {
