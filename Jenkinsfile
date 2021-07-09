@@ -11,7 +11,7 @@ pipeline {
       steps {
         timeout(time: 10, unit: 'MINUTES') {
           ansiColor('xterm') {
-            sh "docker build -t icfpc2021-rust-image:${env.BUILD_TAG} --network=none ."
+            sh "docker build -t icfpc2021-rust-image:${env.BUILD_TAG} ."
           }
         }
       }
@@ -20,7 +20,7 @@ pipeline {
     stage('Build Unit Tests') {
       steps {
         ansiColor('xterm') {
-          sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 --entrypoint ./build-test.sh icfpc2021-rust-image:${env.BUILD_TAG}"
+          sh "docker run -t --rm -e RUST_BACKTRACE=1 --entrypoint ./build-test.sh icfpc2021-rust-image:${env.BUILD_TAG}"
         }
       }
     }
@@ -40,7 +40,7 @@ pipeline {
     //   }
     // }
   }
-  post { 
+  post {
     cleanup {
       sh "docker rmi icfpc2021-rust-image:${env.BUILD_TAG} || true" // Do not signal error if no image found
     }

@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exec cargo test --offline
+exec cargo test
