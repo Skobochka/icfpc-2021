@@ -29,6 +29,7 @@ pub struct Env {
     console_height: u32,
     border_width: u32,
     problem: problem::Problem,
+    initial_problem: problem::Problem,
     original_pose: problem::Pose,
     min_x: f64,
     min_y: f64,
@@ -156,6 +157,7 @@ impl Env {
             console_height,
             border_width,
             original_pose: problem.export_pose(),
+            initial_problem: problem.clone(),
             problem,
             min_x: if min_x_hole > min_x_figure { min_x_figure } else { min_x_hole } as f64,
             min_y: if min_y_hole > min_y_figure { min_y_figure } else { min_y_hole } as f64,
@@ -373,11 +375,14 @@ impl Env {
                     }
                 }
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, };
+                self.import_solution(self.export_solution());
             },
             DragState::WantTarget { vertex_index, allowed, } =>
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, },
-            DragState::WantTargetHighlight { vertex_index, candidate, .. } =>
-                self.problem.figure.vertices[vertex_index] = candidate,
+            DragState::WantTargetHighlight { vertex_index, candidate, .. } => {
+                self.problem.figure.vertices[vertex_index] = candidate;
+                self.import_solution(self.export_solution());
+            },
         }
     }
 
@@ -394,6 +399,8 @@ impl Env {
         for point in &mut self.problem.figure.vertices {
             point.0 -= 1;
         }
+
+        self.import_solution(self.export_solution())
     }
 
     pub fn move_figure_right(&mut self) {
@@ -405,6 +412,8 @@ impl Env {
         for point in &mut self.problem.figure.vertices {
             point.0 += 1;
         }
+
+        self.import_solution(self.export_solution())
     }
 
     pub fn move_figure_upper(&mut self) {
@@ -416,6 +425,8 @@ impl Env {
         for point in &mut self.problem.figure.vertices {
             point.1 -= 1;
         }
+
+        self.import_solution(self.export_solution())
     }
 
     pub fn move_figure_lower(&mut self) {
@@ -427,6 +438,8 @@ impl Env {
         for point in &mut self.problem.figure.vertices {
             point.1 += 1;
         }
+
+        self.import_solution(self.export_solution())
     }
 
     pub fn rotate_figure_left(&mut self) -> Result<(), RotateError> {
@@ -446,7 +459,10 @@ impl Env {
         }
 
         self.problem.figure.import_from_geo(rotated_points)
-            .map_err(RotateError::GeoImport)
+            .map_err(RotateError::GeoImport)?;
+
+        self.import_solution(self.export_solution());
+        Ok(())
     }
 
     pub fn rotate_figure_right(&mut self) -> Result<(), RotateError> {
@@ -466,10 +482,13 @@ impl Env {
         }
 
         self.problem.figure.import_from_geo(rotated_points)
-            .map_err(RotateError::GeoImport)
+            .map_err(RotateError::GeoImport)?;
+        self.import_solution(self.export_solution());
+        Ok(())
     }
 
     pub fn import_solution(&mut self, pose: problem::Pose) {
+        self.problem = self.initial_problem.clone();
         let score = self.problem.import_pose(pose);
         match score {
             Ok(score_value) => {
