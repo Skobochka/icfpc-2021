@@ -28,6 +28,11 @@ pub struct Figure {
     pub vertices: Vec<Point>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Pose {
+    pub vertices: Vec<Point>,
+}
+
 #[derive(Debug)]
 pub enum FromFileError {
     OpenFile(io::Error),
