@@ -262,7 +262,7 @@ impl Env {
                             (mouse_cursor[1] - vertex_y) * (mouse_cursor[1] - vertex_y);
                         if sq_dist < 32.0 {
                             draw_element(draw::DrawElement::Ellipse {
-                                color: [0.0, 1.0, 0.0, 1.0],
+                                color: [1.0, 0.0, 0.0, 1.0],
                                 x: vertex.0 as f64,
                                 y: vertex.1 as f64,
                                 width: 16.0,
@@ -271,7 +271,7 @@ impl Env {
                             highlight = Some(vertex);
                         } else {
                             draw_element(draw::DrawElement::Ellipse {
-                                color: [0.0, 1.0, 0.0, 1.0],
+                                color: [1.0, 0.0, 0.0, 1.0],
                                 x: vertex.0 as f64,
                                 y: vertex.1 as f64,
                                 width: 16.0,
@@ -321,20 +321,42 @@ impl Env {
                     .max()
                     .unwrap();
 
+                let mut allowed = Vec::new();
                 for try_x in vertex.0 - max_edge_len .. vertex.0 + max_edge_len {
                     for try_y in vertex.1 - max_edge_len .. vertex.1 + max_edge_len {
+                        if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
+                            continue;
+                        }
+                        let try_vertex = problem::Point(try_x, try_y);
+                        let mut is_ok = true;
+                        for edge in &connected_edges {
+                            let orig_vertex_index = if edge.0 == vertex_index { edge.0 } else { edge.1 };
+                            let other_vertex_index = if edge.0 == vertex_index { edge.1 } else { edge.0 };
+                            let orig_vertex = self.problem.figure.vertices[orig_vertex_index];
+                            let other_vertex = self.problem.figure.vertices[other_vertex_index];
 
+                            let orig_sq_dist = (orig_vertex.0 - other_vertex.0) * (orig_vertex.0 - other_vertex.0)
+                                + (orig_vertex.1 - other_vertex.1) * (orig_vertex.1 - other_vertex.1);
+                            let try_sq_dist = (try_vertex.0 - other_vertex.0) * (try_vertex.0 - other_vertex.0)
+                                + (try_vertex.1 - other_vertex.1) * (try_vertex.1 - other_vertex.1);
 
+                            let ratio = ((try_sq_dist as f64 / orig_sq_dist as f64) - 1.0).abs();
+                            if ratio > self.problem.epsilon as f64 / 1000000.0 {
+                                is_ok = false;
+                                break;
+                            }
+                        }
+                        if is_ok {
+                            allowed.push(try_vertex);
+                        }
                     }
                 }
-
-
-                self.drag_state = DragState::WantTarget { vertex_index, allowed: todo!(), };
+                self.drag_state = DragState::WantTarget { vertex_index, allowed, };
             },
             DragState::WantTarget { vertex_index, allowed, } =>
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, },
             DragState::WantTargetHighlight { vertex_index, candidate, .. } =>
-                todo!(),
+                self.problem.figure.vertices[vertex_index] = candidate,
         }
     }
 
@@ -448,13 +470,13 @@ impl ViewportTranslator {
         (y - self.min_y) * self.scale_y + self.console_height as f64
     }
 
-    pub fn back_x(&self, viewport_x: f64) -> f64 {
-        (viewport_x - self.border_width as f64) / self.scale_x + self.min_x
-    }
+    // pub fn back_x(&self, viewport_x: f64) -> f64 {
+    //     (viewport_x - self.border_width as f64) / self.scale_x + self.min_x
+    // }
 
-    pub fn back_y(&self, viewport_y: f64) -> f64 {
-        (viewport_y - self.console_height as f64) / self.scale_y + self.min_y
-    }
+    // pub fn back_y(&self, viewport_y: f64) -> f64 {
+    //     (viewport_y - self.console_height as f64) / self.scale_y + self.min_y
+    // }
 }
 
 fn dist(point_a: problem::Point, point_b: problem::Point) -> i64 {
