@@ -186,6 +186,8 @@ fn main() -> Result<(), Error> {
                     .map_err(Error::PoseExport)?;
                 log::info!("pose {:?} has been written to {:?}", pose, cli_args.common.pose_file);
             },
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::R), state: ButtonState::Release, .. }), _timestamp) =>
+                env.figure_reset(),
             _ =>
                 (),
         }

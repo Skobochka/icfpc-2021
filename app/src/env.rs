@@ -501,6 +501,10 @@ impl Env {
     pub fn export_solution(&self) -> problem::Pose {
         self.problem.export_pose()
     }
+
+    pub fn figure_reset(&mut self) {
+        self.problem.figure.vertices = self.original_pose.vertices.clone();
+    }
 }
 
 impl ViewportTranslator {
