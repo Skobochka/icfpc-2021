@@ -144,6 +144,10 @@ fn main() -> Result<(), Error> {
                 env.move_figure_upper(),
             Some(Button::Keyboard(Key::S)) =>
                 env.move_figure_lower(),
+            Some(Button::Keyboard(Key::Z)) =>
+                env.rotate_figure_left(),
+            Some(Button::Keyboard(Key::X)) =>
+                env.rotate_figure_right(),
             Some(Button::Keyboard(Key::E)) => {
                 let pose = env.export_solution();
                 pose.write_to_file(&cli_args.common.pose_file)

@@ -65,6 +65,32 @@ impl Problem {
     }
 }
 
+#[derive(Debug)]
+pub enum GeoExportError {
+    InvalidEdgeSourceIndex { edge: Edge, index: usize, },
+    InvalidEdgeTargetIndex { edge: Edge, index: usize, },
+}
+
+impl Figure {
+    pub fn export_to_geo(&self) -> Result<geo::MultiLineString<i64>, GeoExportError> {
+
+        let mut line_strings = Vec::with_capacity(self.edges.len());
+        for &edge in &self.edges {
+            let source_point = self.vertices.get(edge.0)
+                .ok_or(GeoExportError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
+            let target_point = self.vertices.get(edge.1)
+                .ok_or(GeoExportError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
+            let line_string = geo::LineString(vec![
+                geo::Coordinate { x: source_point.0, y: source_point.1, },
+                geo::Coordinate { x: target_point.0, y: target_point.1, },
+            ]);
+            line_strings.push(line_string);
+        }
+
+        Ok(geo::MultiLineString(line_strings))
+    }
+}
+
 impl Pose {
     pub fn write_to_file<P>(&self, filename: P) -> Result<(), WriteFileError> where P: AsRef<Path> {
         let file = fs::File::create(filename)

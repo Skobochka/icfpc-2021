@@ -1,3 +1,11 @@
+use geo::{
+    algorithm::{
+        rotate::{
+            Rotate,
+        },
+    },
+};
+
 use piston_window::{
     Viewport,
 };
@@ -221,6 +229,16 @@ impl Env {
         for point in &mut self.problem.figure.vertices {
             point.1 += 1;
         }
+    }
+
+    pub fn rotate_figure_left(&mut self) {
+
+        todo!()
+    }
+
+    pub fn rotate_figure_right(&mut self) {
+
+        todo!()
     }
 
     pub fn export_solution(&self) -> problem::Pose {
