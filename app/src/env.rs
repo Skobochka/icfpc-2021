@@ -54,6 +54,12 @@ pub enum DrawError {
     InvalidEdgeTargetIndex { edge: problem::Edge, index: usize, },
 }
 
+#[derive(Debug)]
+pub enum RotateError {
+    GeoExport(problem::GeoExportError),
+    GeoImport(problem::GeoImportError),
+}
+
 impl Env {
     pub fn new(
         problem: problem::Problem,
@@ -231,14 +237,40 @@ impl Env {
         }
     }
 
-    pub fn rotate_figure_left(&mut self) {
+    pub fn rotate_figure_left(&mut self) -> Result<(), RotateError> {
+        let geo_figure = self.problem.figure.export_to_geo()
+            .map_err(RotateError::GeoExport)?;
 
-        todo!()
+        let rotated_geo_figure = geo_figure.rotate(-1.0);
+
+        for multi_line in &rotated_geo_figure {
+            for point in multi_line.points_iter() {
+                if point.x() < self.min_x || point.x() > self.max_x || point.y() < self.min_y || point.y() > self.max_y {
+                    return Ok(());
+                }
+            }
+        }
+
+        self.problem.figure.import_from_geo(rotated_geo_figure)
+            .map_err(RotateError::GeoImport)
     }
 
-    pub fn rotate_figure_right(&mut self) {
+    pub fn rotate_figure_right(&mut self) -> Result<(), RotateError> {
+        let geo_figure = self.problem.figure.export_to_geo()
+            .map_err(RotateError::GeoExport)?;
 
-        todo!()
+        let rotated_geo_figure = geo_figure.rotate(1.0);
+
+        for multi_line in &rotated_geo_figure {
+            for point in multi_line.points_iter() {
+                if point.x() < self.min_x || point.x() > self.max_x || point.y() < self.min_y || point.y() > self.max_y {
+                    return Ok(());
+                }
+            }
+        }
+
+        self.problem.figure.import_from_geo(rotated_geo_figure)
+            .map_err(RotateError::GeoImport)
     }
 
     pub fn export_solution(&self) -> problem::Pose {

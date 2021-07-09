@@ -71,8 +71,13 @@ pub enum GeoExportError {
     InvalidEdgeTargetIndex { edge: Edge, index: usize, },
 }
 
+#[derive(Debug)]
+pub enum GeoImportError {
+
+}
+
 impl Figure {
-    pub fn export_to_geo(&self) -> Result<geo::MultiLineString<i64>, GeoExportError> {
+    pub fn export_to_geo(&self) -> Result<geo::MultiLineString<f64>, GeoExportError> {
 
         let mut line_strings = Vec::with_capacity(self.edges.len());
         for &edge in &self.edges {
@@ -81,13 +86,18 @@ impl Figure {
             let target_point = self.vertices.get(edge.1)
                 .ok_or(GeoExportError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
             let line_string = geo::LineString(vec![
-                geo::Coordinate { x: source_point.0, y: source_point.1, },
-                geo::Coordinate { x: target_point.0, y: target_point.1, },
+                geo::Coordinate { x: source_point.0 as f64, y: source_point.1 as f64, },
+                geo::Coordinate { x: target_point.0 as f64, y: target_point.1 as f64, },
             ]);
             line_strings.push(line_string);
         }
 
         Ok(geo::MultiLineString(line_strings))
+    }
+
+    pub fn import_from_geo(&mut self, geo_figure: geo::MultiLineString<f64>) -> Result<(), GeoImportError> {
+
+        todo!()
     }
 }
 

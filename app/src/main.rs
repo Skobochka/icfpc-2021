@@ -60,6 +60,7 @@ pub enum Error {
     GlyphsCreate(io::Error),
     EnvCreate(env::CreateError),
     EnvDraw(env::DrawError),
+    EnvRotate(env::RotateError),
     PistonWindowCreate(Box<dyn std::error::Error>),
     PistonDraw2d(Box<dyn std::error::Error>),
     PoseExport(problem::WriteFileError),
@@ -145,9 +146,9 @@ fn main() -> Result<(), Error> {
             Some(Button::Keyboard(Key::S)) =>
                 env.move_figure_lower(),
             Some(Button::Keyboard(Key::Z)) =>
-                env.rotate_figure_left(),
+                env.rotate_figure_left().map_err(Error::EnvRotate)?,
             Some(Button::Keyboard(Key::X)) =>
-                env.rotate_figure_right(),
+                env.rotate_figure_right().map_err(Error::EnvRotate)?,
             Some(Button::Keyboard(Key::E)) => {
                 let pose = env.export_solution();
                 pose.write_to_file(&cli_args.common.pose_file)
