@@ -53,6 +53,12 @@ pub enum WriteFileError {
     Serialize(serde_json::Error),
 }
 
+#[derive(Debug)]
+pub enum PoseValidationError {
+    VericeCountMismatch,
+    BrokenEdgesFound(Vec<Edge>),
+}
+
 impl Problem {
     pub fn from_file<P>(filename: P) -> Result<Problem, FromFileError> where P: AsRef<Path> {
         let file = fs::File::open(filename)
@@ -74,6 +80,35 @@ impl Problem {
 
     pub fn hole_polygon(&self) -> geo::Polygon<i64> {
         geo::Polygon::new(self.hole.clone().into(), vec![])
+    }
+
+    pub fn score_pose<'a>(&self, pose: &'a Pose) -> Result<i64, PoseValidationError> {
+        // Check (a): connectivity. As our app does not change include edges in Pose,
+        // we just check that the new Pose inclues the same number of vertices as the original
+        if self.figure.vertices.len() != pose.vertices.len() {
+            return Err(PoseValidationError::VericeCountMismatch)
+        }
+
+        // Check stretching
+        let vertices_buf: Vec<(&Point, &Point)> = self.figure.vertices.iter().zip(pose.vertices.iter()).collect();
+        let broken_edges: Vec<Edge> = self.figure.edges.iter().filter(|edge| {
+            match edge {
+                Edge(from_idx, to_idx) => {
+                    let d_before = distance(vertices_buf[*from_idx].0, vertices_buf[*to_idx].0);
+                    let d_after = distance(vertices_buf[*from_idx].1, vertices_buf[*to_idx].1);
+
+                    ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64
+                }
+            }
+        }).map(|item| item.clone()).collect();
+        if broken_edges.len() > 0 {
+            return Err(PoseValidationError::BrokenEdgesFound(broken_edges));
+        }
+
+        // Check hole
+
+
+        Ok(0)
     }
 }
 
@@ -172,6 +207,10 @@ impl geo::algorithm::contains::Contains<Point> for geo::Polygon<i64> {
         // Present either inside polygon or on it's boundaries
         self.exterior().contains(&geo_point) || self.contains(&geo_point)
     }
+}
+
+pub fn distance(p: &Point, q: &Point) -> i64 {
+    (p.0 - q.0) * (p.0 - q.0) + (p.1 - q.1) * (p.1 - q.1)
 }
 
 
