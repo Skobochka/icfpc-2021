@@ -330,13 +330,14 @@ impl Env {
                         let try_vertex = problem::Point(try_x, try_y);
                         let mut is_ok = true;
                         for edge in &connected_edges {
-                            let orig_vertex_index = if edge.0 == vertex_index { edge.0 } else { edge.1 };
+                            let sample_vertex_a = self.original_pose.vertices[edge.0];
+                            let sample_vertex_b = self.original_pose.vertices[edge.1];
+
                             let other_vertex_index = if edge.0 == vertex_index { edge.1 } else { edge.0 };
-                            let orig_vertex = self.problem.figure.vertices[orig_vertex_index];
                             let other_vertex = self.problem.figure.vertices[other_vertex_index];
 
-                            let orig_sq_dist = (orig_vertex.0 - other_vertex.0) * (orig_vertex.0 - other_vertex.0)
-                                + (orig_vertex.1 - other_vertex.1) * (orig_vertex.1 - other_vertex.1);
+                            let orig_sq_dist = (sample_vertex_a.0 - sample_vertex_b.0) * (sample_vertex_a.0 - sample_vertex_b.0)
+                                + (sample_vertex_a.1 - sample_vertex_b.1) * (sample_vertex_a.1 - sample_vertex_b.1);
                             let try_sq_dist = (try_vertex.0 - other_vertex.0) * (try_vertex.0 - other_vertex.0)
                                 + (try_vertex.1 - other_vertex.1) * (try_vertex.1 - other_vertex.1);
 
