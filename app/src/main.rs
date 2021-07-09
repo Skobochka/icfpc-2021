@@ -165,9 +165,7 @@ fn main() -> Result<(), Error> {
             Event::Input(Input::Button(ButtonArgs { button: Button::Mouse(MouseButton::Left), state: ButtonState::Release, .. }), _timestamp) =>
                 env.mouse_click(),
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::M), state: ButtonState::Release, .. }), _timestamp) =>
-                env.reset_mirror(),
-            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::N), state: ButtonState::Release, .. }), _timestamp) =>
-                env.apply_mirror(),
+                env.reset_drag(),
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::A), state: ButtonState::Release, .. }), _timestamp) =>
                 env.move_figure_left(),
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::D), state: ButtonState::Release, .. }), _timestamp) =>
