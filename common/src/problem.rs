@@ -136,7 +136,7 @@ impl Problem {
         }
 
         let dislikes = self.hole.iter().map(|hole_vert| {
-            self.figure.vertices.iter().map(|pose_vert| distance(hole_vert, pose_vert)).min().unwrap()
+            pose.vertices.iter().map(|pose_vert| distance(hole_vert, pose_vert)).min().unwrap()
         }).sum();
 
         Ok(dislikes)
