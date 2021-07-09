@@ -57,6 +57,7 @@ pub enum WriteFileError {
 pub enum PoseValidationError {
     VericeCountMismatch,
     BrokenEdgesFound(Vec<Edge>),
+    EdgesNotFitHole(Vec<Edge>),
 }
 
 impl Problem {
@@ -106,7 +107,24 @@ impl Problem {
         }
 
         // Check hole
-
+        let geo_hole = self.hole_polygon();
+        let edges_out_of_hole = self.figure.edges.iter()
+            .filter_map(|edge| {
+                let Edge(from_idx, to_idx) = edge;
+                let geo_edge = geo::Line {
+                    start: geo::Coordinate::from(pose.vertices[*from_idx]),
+                    end: geo::Coordinate::from(pose.vertices[*to_idx])
+                };
+                if geo_hole.contains(&geo_edge) {
+                    None
+                }
+                else {
+                    Some(edge)
+                }
+            }).collect();
+        if edges_out_of_hole.len() > 0 {
+            return Err(PoseValidationError::EdgesNotFitHole(broken_edges));
+        }
 
         Ok(0)
     }
