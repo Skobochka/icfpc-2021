@@ -9,4 +9,11 @@ pub enum DrawElement {
         target_x: f64,
         target_y: f64,
     },
+    Ellipse {
+        color: [f32; 4],
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
 }

@@ -30,6 +30,7 @@ pub struct Env {
     min_y: f64,
     max_x: f64,
     max_y: f64,
+    mouse_cursor: Option<[f64; 2]>,
 }
 
 pub struct ViewportTranslator {
@@ -136,6 +137,7 @@ impl Env {
             min_y: if min_y_hole > min_y_figure { min_y_figure } else { min_y_hole } as f64,
             max_x: if max_x_hole < max_x_figure { max_x_figure } else { max_x_hole } as f64,
             max_y: if max_y_hole < max_y_figure { max_y_figure } else { max_y_hole } as f64,
+            mouse_cursor: None,
         })
     }
 
@@ -162,7 +164,7 @@ impl Env {
         format!("move: W/A/S/D, rotate: Z/X, export pose: E")
     }
 
-    pub fn draw<DF>(&self, mut draw_element: DF) -> Result<(), DrawError> where DF: FnMut(draw::DrawElement) {
+    pub fn draw<DF>(&self, tr: &ViewportTranslator, mut draw_element: DF) -> Result<(), DrawError> where DF: FnMut(draw::DrawElement) {
         let mut points_iter = self.problem.hole.iter();
         let mut prev_point = points_iter.next()
             .ok_or(DrawError::NoPointsInHole)?;
@@ -193,7 +195,35 @@ impl Env {
             });
         }
 
+        if let Some(mouse_cursor) = self.mouse_cursor {
+            for vertex in &self.problem.figure.vertices {
+                let vertex_x = tr.x(vertex.0 as f64);
+                let vertex_y = tr.y(vertex.1 as f64);
+                let sq_dist =
+                    (mouse_cursor[0] - vertex_x) * (mouse_cursor[0] - vertex_x) +
+                    (mouse_cursor[1] - vertex_y) * (mouse_cursor[1] - vertex_y);
+                if sq_dist < 32.0 {
+                    draw_element(draw::DrawElement::Ellipse {
+                        color: [0.0, 1.0, 0.0, 1.0],
+                        x: vertex.0 as f64,
+                        y: vertex.1 as f64,
+                        width: 16.0,
+                        height: 16.0,
+                    });
+                    break;
+                }
+            }
+        }
+
         Ok(())
+    }
+
+    pub fn update_mouse_cursor(&mut self, position: [f64; 2]) {
+        self.mouse_cursor = Some(position);
+    }
+
+    pub fn mouse_cursor_left(&mut self) {
+        self.mouse_cursor = None;
     }
 
     pub fn move_figure_left(&mut self) {

@@ -12,12 +12,16 @@ use structopt::{
 };
 
 use piston_window::{
+    Key,
+    Input,
+    Event,
+    Button,
     OpenGL,
+    Motion,
+    ButtonArgs,
+    ButtonState,
     PistonWindow,
     WindowSettings,
-    PressEvent,
-    Button,
-    Key
 };
 
 use common::{
@@ -101,7 +105,7 @@ fn main() -> Result<(), Error> {
 
     while let Some(event) = window.next() {
         let maybe_result = window.draw_2d(&event, |context, g2d, device| {
-            use piston_window::{clear, text, line, Transformed};
+            use piston_window::{clear, text, line, ellipse, Transformed};
             clear([0.0, 0.0, 0.0, 1.0], g2d);
 
             text::Text::new_color([0.0, 1.0, 0.0, 1.0], 16)
@@ -117,11 +121,13 @@ fn main() -> Result<(), Error> {
 
             if let Some(tr) = env.translator(&context.viewport) {
                 env.draw(
+                    &tr,
                     |element| {
                         match element {
-                            draw::DrawElement::Line { color, radius, source_x, source_y, target_x, target_y } => {
-                                line(color, radius, [tr.x(source_x), tr.y(source_y), tr.x(target_x), tr.y(target_y)], context.transform, g2d);
-                            },
+                            draw::DrawElement::Line { color, radius, source_x, source_y, target_x, target_y } =>
+                                line(color, radius, [tr.x(source_x), tr.y(source_y), tr.x(target_x), tr.y(target_y)], context.transform, g2d),
+                            draw::DrawElement::Ellipse { color, x, y, width, height, } =>
+                                ellipse(color, [tr.x(x) - (width / 2.0), tr.y(y) - (height / 2.0), width, height], context.transform, g2d),
                         }
                     })
                     .map_err(Error::EnvDraw)?;
@@ -136,22 +142,26 @@ fn main() -> Result<(), Error> {
             let () = result?;
         }
 
-        match event.press_args() {
-            Some(Button::Keyboard(Key::Q)) =>
+        match event {
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::Q), state: ButtonState::Release, .. }), _timestamp) =>
                 break,
-            Some(Button::Keyboard(Key::A)) =>
+            Event::Input(Input::Move(Motion::MouseCursor(position)), _timestamp) =>
+                env.update_mouse_cursor(position),
+            Event::Input(Input::Cursor(false), _timestamp) =>
+                env.mouse_cursor_left(),
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::A), state: ButtonState::Release, .. }), _timestamp) =>
                 env.move_figure_left(),
-            Some(Button::Keyboard(Key::D)) =>
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::D), state: ButtonState::Release, .. }), _timestamp) =>
                 env.move_figure_right(),
-            Some(Button::Keyboard(Key::W)) =>
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::W), state: ButtonState::Release, .. }), _timestamp) =>
                 env.move_figure_upper(),
-            Some(Button::Keyboard(Key::S)) =>
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::S), state: ButtonState::Release, .. }), _timestamp) =>
                 env.move_figure_lower(),
-            Some(Button::Keyboard(Key::Z)) =>
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::Z), state: ButtonState::Release, .. }), _timestamp) =>
                 env.rotate_figure_left().map_err(Error::EnvRotate)?,
-            Some(Button::Keyboard(Key::X)) =>
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::X), state: ButtonState::Release, .. }), _timestamp) =>
                 env.rotate_figure_right().map_err(Error::EnvRotate)?,
-            Some(Button::Keyboard(Key::E)) => {
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::E), state: ButtonState::Release, .. }), _timestamp) => {
                 let pose = env.export_solution();
                 pose.write_to_file(&cli_args.common.pose_file)
                     .map_err(Error::PoseExport)?;
