@@ -79,9 +79,9 @@ impl Problem {
     }
 
     pub fn import_pose(&mut self, pose: Pose) -> Result<i64, PoseValidationError> {
-        let score = self.score_pose(&pose)?;
+        let score = self.score_pose(&pose);
         self.figure.vertices = pose.vertices;
-        Ok(score)
+        score
     }
 
     pub fn hole_polygon(&self) -> geo::Polygon<i64> {
