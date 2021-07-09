@@ -320,6 +320,7 @@ impl Env {
                     })
                     .max()
                     .unwrap();
+                let max_edge_len = (max_edge_len as f64 * 1.25) as i64;
 
                 let mut allowed = Vec::new();
                 for try_x in vertex.0 - max_edge_len .. vertex.0 + max_edge_len {
