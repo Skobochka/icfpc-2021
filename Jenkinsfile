@@ -4,59 +4,46 @@ pipeline {
   environment {
     GITHUB_TOKEN = credentials('GitHubToken')
     GITHUB_URL_PREFIX = 'https://api.github.com/repos/Skobochka/icfpc-2021/statuses'
-    // DOCKERFILE_URL = 'https://raw.githubusercontent.com/icfpcontest2020/dockerfiles/master/dockerfiles/rust/Dockerfile'
   }
 
   stages {
-    stage('Stub CI job') {
+    stage('Build') {
       steps {
-        sh "echo Jenkins PASS!"}"
+        timeout(time: 10, unit: 'MINUTES') {
+          ansiColor('xterm') {
+            sh "docker build -t icfpc2021-rust-image:${env.BUILD_TAG} --network=none ."
+          }
+        }
       }
     }
 
-    // stage('Fetch Dockerfile') {
-    //   steps {
-    //     sh "wget -O Dockerfile ${DOCKERFILE_URL}"
-    //   }
-    // }
+    stage('Build Unit Tests') {
+      steps {
+        ansiColor('xterm') {
+          sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 --entrypoint ./build-test.sh icfpc2021-rust-image:${env.BUILD_TAG}"
+        }
+      }
+    }
 
-    // stage('Build') {
-    //   steps {
-    //     timeout(time: 10, unit: 'MINUTES') {
-    //       ansiColor('xterm') {
-    //         sh "docker build -t icfpc2020-rust-org-image:${env.BUILD_TAG} --network=none ."
-    //       }
-    //     }
-    //   }
-    // }
-
-    // stage('Build Unit Tests') {
-    //   steps {
-    //     ansiColor('xterm') {
-    //       sh "docker run -t --rm --network=none -e RUST_BACKTRACE=1 --entrypoint ./build-test.sh icfpc2020-rust-org-image:${env.BUILD_TAG}"
-    //     }
-    //   }
-    // }
-
-    // stage('Run Unit Tests') {
-    //   steps {
-    //     ansiColor('xterm') {
-    //       sh "docker run -t --rm -e RUST_BACKTRACE=1 --entrypoint ./test.sh icfpc2020-rust-org-image:${env.BUILD_TAG}"
-    //     }
-    //   }
-    // }
+    stage('Run Unit Tests') {
+      steps {
+        ansiColor('xterm') {
+          sh "docker run -t --rm -e RUST_BACKTRACE=1 --entrypoint ./test.sh icfpc2021-rust-image:${env.BUILD_TAG}"
+        }
+      }
+    }
 
     // DISABLED until proper server found
     // stage('Smoke Test') {
     //   steps {
-    //     sh "docker run -t --rm -e RUST_BACKTRACE=1 icfpc2020-rust-org-image:${env.BUILD_TAG} http://server:12345 2933935384595749692"
+    //     sh "docker run -t --rm -e RUST_BACKTRACE=1 icfpc2021-rust-image:${env.BUILD_TAG} http://server:12345 2933935384595749692"
     //   }
     // }
   }
   post { 
-    // cleanup {
-    //   sh "docker rmi icfpc2020-rust-org-image:${env.BUILD_TAG} || true" // Do not signal error if no image found
-    // }
+    cleanup {
+      sh "docker rmi icfpc2021-rust-image:${env.BUILD_TAG} || true" // Do not signal error if no image found
+    }
     always {
       script {
         def changeLog = "```";
