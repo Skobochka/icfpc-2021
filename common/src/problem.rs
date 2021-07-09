@@ -6,6 +6,9 @@ use std::{
 
 use geo::{
     algorithm::{
+        contains::{
+            Contains,
+        },
         centroid::{
             Centroid,
         },
@@ -83,6 +86,10 @@ impl Problem {
         geo::Polygon::new(self.hole.clone().into(), vec![])
     }
 
+    pub fn hole_polygon_f64(&self) -> geo::Polygon<f64> {
+        geo::Polygon::new(self.hole.clone().into(), vec![])
+    }
+
     pub fn score_pose<'a>(&self, pose: &'a Pose) -> Result<i64, PoseValidationError> {
         // Check (a): connectivity. As our app does not change include edges in Pose,
         // we just check that the new Pose inclues the same number of vertices as the original
@@ -107,8 +114,8 @@ impl Problem {
         }
 
         // Check hole
-        let geo_hole = self.hole_polygon();
-        let edges_out_of_hole = self.figure.edges.iter()
+        let geo_hole = self.hole_polygon_f64();
+        let edges_out_of_hole: Vec<Edge> = self.figure.edges.iter()
             .filter_map(|edge| {
                 let Edge(from_idx, to_idx) = edge;
                 let geo_edge = geo::Line {
@@ -121,7 +128,7 @@ impl Problem {
                 else {
                     Some(edge)
                 }
-            }).collect();
+            }).map(|item| item.clone()).collect();
         if edges_out_of_hole.len() > 0 {
             return Err(PoseValidationError::EdgesNotFitHole(broken_edges));
         }
@@ -209,6 +216,12 @@ impl From<Point> for geo::Point<i64> {
 impl From<Point> for geo::Coordinate<i64> {
     fn from(point: Point) -> Self {
         geo::Coordinate::<i64> { x: point.0, y: point.1 }
+    }
+}
+
+impl From<Point> for geo::Coordinate<f64> {
+    fn from(point: Point) -> Self {
+        geo::Coordinate::<f64> { x: point.0 as f64, y: point.1 as f64 }
     }
 }
 
