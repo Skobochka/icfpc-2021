@@ -393,6 +393,10 @@ impl Env {
             .map_err(RotateError::GeoImport)
     }
 
+    pub fn import_solution(&mut self, pose: problem::Pose) {
+        self.problem.import_pose(pose);
+    }
+
     pub fn export_solution(&self) -> problem::Pose {
         self.problem.export_pose()
     }

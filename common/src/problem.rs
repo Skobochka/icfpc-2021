@@ -68,6 +68,10 @@ impl Problem {
         }
     }
 
+    pub fn import_pose(&mut self, pose: Pose) {
+        self.figure.vertices = pose.vertices;
+    }
+
     pub fn hole_polygon(&self) -> geo::Polygon<i64> {
         geo::Polygon::new(self.hole.clone().into(), vec![])
     }
@@ -126,6 +130,14 @@ impl Figure {
 }
 
 impl Pose {
+    pub fn from_file<P>(filename: P) -> Result<Pose, FromFileError> where P: AsRef<Path> {
+        let file = fs::File::open(filename)
+            .map_err(FromFileError::OpenFile)?;
+        let reader = io::BufReader::new(file);
+        serde_json::from_reader(reader)
+            .map_err(FromFileError::Deserialize)
+    }
+
     pub fn write_to_file<P>(&self, filename: P) -> Result<(), WriteFileError> where P: AsRef<Path> {
         let file = fs::File::create(filename)
             .map_err(WriteFileError::CreateFile)?;
