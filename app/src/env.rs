@@ -214,7 +214,7 @@ impl Env {
 
     pub fn move_figure_lower(&mut self) {
         for point in &self.problem.figure.vertices {
-            if point.1 + 1 > self.max_x as i64 {
+            if point.1 + 1 > self.max_y as i64 {
                 return;
             }
         }
