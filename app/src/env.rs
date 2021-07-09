@@ -245,7 +245,7 @@ impl Env {
         let rotated_points: Vec<_> = geo_figure
             .points
             .iter()
-            .map(|p| p.rotate_around_point(-1.0, geo_figure.centroid))
+            .map(|p| p.rotate_around_point(-15.0, geo_figure.centroid))
             .collect();
 
         for point in &rotated_points {
@@ -265,7 +265,7 @@ impl Env {
         let rotated_points: Vec<_> = geo_figure
             .points
             .iter()
-            .map(|p| p.rotate_around_point(1.0, geo_figure.centroid))
+            .map(|p| p.rotate_around_point(15.0, geo_figure.centroid))
             .collect();
 
         for point in &rotated_points {
