@@ -16,7 +16,6 @@ use piston_window::{
     PistonWindow,
     WindowSettings,
     TextureSettings,
-    Viewport,
     Glyphs,
     PressEvent,
     Button,
@@ -27,6 +26,9 @@ use common::{
     cli,
     problem,
 };
+
+mod env;
+mod draw;
 
 #[derive(Clone, StructOpt, Debug)]
 #[structopt(setting = AppSettings::DeriveDisplayOrder)]
@@ -54,9 +56,12 @@ pub struct CliArgs {
 
 #[derive(Debug)]
 pub enum Error {
-    LoadProblem(problem::FromFileError),
-    PistonWindowCreate(Box<dyn std::error::Error>),
+    ProblemLoad(problem::FromFileError),
     GlyphsCreate(io::Error),
+    EnvCreate(env::CreateError),
+    EnvDraw(env::DrawError),
+    PistonWindowCreate(Box<dyn std::error::Error>),
+    PistonDraw2d(Box<dyn std::error::Error>),
 }
 
 fn main() -> Result<(), Error> {
@@ -65,7 +70,7 @@ fn main() -> Result<(), Error> {
     log::info!("program starts as: {:?}", cli_args);
 
     let problem = problem::Problem::from_file(&cli_args.common.problem_file)
-        .map_err(Error::LoadProblem)?;
+        .map_err(Error::ProblemLoad)?;
     log::debug!(" ;; problem loaded: {:?}", problem);
 
     let opengl = OpenGL::V3_2;
@@ -84,11 +89,48 @@ fn main() -> Result<(), Error> {
     let mut glyphs = Glyphs::new(&font_path, window.create_texture_context(), TextureSettings::new())
         .map_err(Error::GlyphsCreate)?;
 
-    while let Some(event) = window.next() {
-        window.draw_2d(&event, |context, g2d, _device| {
+    let env =
+        env::Env::new(
+            problem,
+            cli_args.screen_width,
+            cli_args.screen_height,
+            cli_args.console_height,
+            cli_args.border_width,
+        )
+        .map_err(Error::EnvCreate)?;
 
-            // todo!()
+    while let Some(event) = window.next() {
+        let maybe_result = window.draw_2d(&event, |context, g2d, _device| {
+            use piston_window::{clear, text, line, Transformed};
+            clear([0.0, 0.0, 0.0, 1.0], g2d);
+
+            text::Text::new_color([0.0, 1.0, 0.0, 2.0], 16)
+                .draw(
+                    &env.console_text(),
+                    &mut glyphs,
+                    &context.draw_state,
+                    context.transform.trans(5.0, 20.0),
+                    g2d,
+                )
+                .map_err(From::from)
+                .map_err(Error::PistonDraw2d)?;
+
+            if let Some(tr) = env.translator(&context.viewport) {
+                env.draw(
+                    |element| {
+                        match element {
+                            draw::DrawElement::Line { color, radius, source_x, source_y, target_x, target_y } => {
+                                line(color, radius, [tr.x(source_x), tr.y(source_y), tr.x(target_x), tr.y(target_y)], context.transform, g2d);
+                            },
+                        }
+                    })
+                    .map_err(Error::EnvDraw)?;
+            }
+            Ok(())
         });
+        if let Some(result) = maybe_result {
+            let () = result?;
+        }
 
         match event.press_args() {
             Some(Button::Keyboard(Key::Q)) =>
