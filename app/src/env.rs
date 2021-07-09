@@ -1,9 +1,20 @@
-use std::mem;
+use std::{
+    mem,
+    collections::{
+        HashSet,
+    },
+};
 
 use geo::{
     algorithm::{
         rotate::{
             RotatePoint,
+        },
+        line_locate_point::{
+            LineLocatePoint,
+        },
+        line_interpolate_point::{
+            LineInterpolatePoint,
         },
     },
 };
@@ -41,7 +52,9 @@ enum MirrorState {
     WantStart,
     WantStartHighlight { candidate: problem::Point, },
     WantEnd { start: problem::Point, },
-    LineGot { start: problem::Point, end: [f64; 2], },
+    WantEndCommit { start: problem::Point, cursor_end: [f64; 2], },
+    LineGot { start: problem::Point, end: problem::Point, pending_mirror: HashSet<usize>, },
+    LineGotHighlight { start: problem::Point, end: problem::Point, pending_mirror: HashSet<usize>, candidate_index: usize, },
 }
 
 pub struct ViewportTranslator {
@@ -179,10 +192,15 @@ impl Env {
                 MirrorState::WantStart |
                 MirrorState::WantStartHighlight { .. } =>
                     "choose FIRST point".to_string(),
-                MirrorState::WantEnd { .. } =>
+                MirrorState::WantEnd { .. } |
+                MirrorState::WantEndCommit { .. } =>
                     "choose SECOND point (M to reset)".to_string(),
-                MirrorState::LineGot { .. } =>
+                MirrorState::LineGot { ref pending_mirror, .. } |
+                MirrorState::LineGotHighlight { ref pending_mirror, .. } if pending_mirror.is_empty() =>
                     "line READY (M to reset)".to_string(),
+                MirrorState::LineGot { ref pending_mirror, .. } |
+                MirrorState::LineGotHighlight { ref pending_mirror, .. } =>
+                    format!("line READY (N to apply {} vertices, M to reset)", pending_mirror.len()),
             },
         )
     }
@@ -218,8 +236,8 @@ impl Env {
             });
         }
 
-        if let Some(mouse_cursor) = self.mouse_cursor {
-            match self.mirror_state {
+        while let Some(mouse_cursor) = self.mouse_cursor {
+            match mem::replace(&mut self.mirror_state, MirrorState::WantStart) {
                 MirrorState::WantStart |
                 MirrorState::WantStartHighlight { .. } => {
                     self.mirror_state = MirrorState::WantStart;
@@ -243,6 +261,7 @@ impl Env {
                     }
                 },
                 MirrorState::WantEnd { start, } => {
+                    self.mirror_state = MirrorState::WantEnd { start, };
                     draw_element(draw::DrawElement::Ellipse {
                         color: [0.0, 1.0, 0.0, 1.0],
                         x: start.0 as f64,
@@ -261,19 +280,65 @@ impl Env {
                         target_y: mouse_y as f64,
                     });
                 },
-                MirrorState::LineGot { start, end, } => {
-                    let end_x = tr.back_x(end[0]);
-                    let end_y = tr.back_y(end[1]);
+                MirrorState::WantEndCommit { start, cursor_end, } => {
+                    let end_x = tr.back_x(cursor_end[0]);
+                    let end_y = tr.back_y(cursor_end[1]);
+                    self.mirror_state = MirrorState::LineGot {
+                        start,
+                        end: problem::Point(end_x as i64, end_y as i64),
+                        pending_mirror: HashSet::new(),
+                    };
+                    continue;
+                },
+                MirrorState::LineGot { start, end, pending_mirror, } |
+                MirrorState::LineGotHighlight { start, end, pending_mirror, .. } => {
                     draw_element(draw::DrawElement::Line {
                         color: [0.0, 1.0, 0.0, 1.0],
                         radius: 3.0,
                         source_x: start.0 as f64,
                         source_y: start.1 as f64,
-                        target_x: end_x as f64,
-                        target_y: end_y as f64,
+                        target_x: end.0 as f64,
+                        target_y: end.1 as f64,
                     });
+
+                    for &pending_index in &pending_mirror {
+                        let point = self.problem.figure.vertices[pending_index];
+                        draw_element(draw::DrawElement::Ellipse {
+                            color: [1.0, 0.0, 0.0, 1.0],
+                            x: point.0 as f64,
+                            y: point.1 as f64,
+                            width: 16.0,
+                            height: 16.0,
+                        });
+                    }
+
+                    let mut highlight = None;
+                    for (index, &vertex) in self.problem.figure.vertices.iter().enumerate() {
+                        let vertex_x = tr.x(vertex.0 as f64);
+                        let vertex_y = tr.y(vertex.1 as f64);
+                        let sq_dist =
+                            (mouse_cursor[0] - vertex_x) * (mouse_cursor[0] - vertex_x) +
+                            (mouse_cursor[1] - vertex_y) * (mouse_cursor[1] - vertex_y);
+                        if sq_dist < 32.0 {
+                            draw_element(draw::DrawElement::Ellipse {
+                                color: [1.0, 0.0, 0.0, 1.0],
+                                x: vertex.0 as f64,
+                                y: vertex.1 as f64,
+                                width: 16.0,
+                                height: 16.0,
+                            });
+                            highlight = Some(index);
+                            break;
+                        }
+                    }
+                    if let Some(candidate_index) = highlight {
+                        self.mirror_state = MirrorState::LineGotHighlight { start, end, pending_mirror, candidate_index, };
+                    } else {
+                        self.mirror_state = MirrorState::LineGot { start, end, pending_mirror, };
+                    }
                 },
             }
+            break;
         }
 
         Ok(())
@@ -294,19 +359,55 @@ impl Env {
             MirrorState::WantStartHighlight { candidate, } =>
                 self.mirror_state = MirrorState::WantEnd { start: candidate, },
             MirrorState::WantEnd { start, } => {
-                if let Some(end) = self.mouse_cursor {
-                    self.mirror_state = MirrorState::LineGot { start, end, };
+                if let Some(cursor_end) = self.mouse_cursor {
+                    self.mirror_state = MirrorState::WantEndCommit { start, cursor_end, };
                 } else {
                     self.mirror_state = MirrorState::WantEnd { start, };
                 }
             },
-            MirrorState::LineGot { start, end, } =>
-                self.mirror_state = MirrorState::LineGot { start, end, },
+            MirrorState::WantEndCommit { start, cursor_end, } =>
+                self.mirror_state = MirrorState::WantEndCommit { start, cursor_end, },
+            MirrorState::LineGot { start, end, pending_mirror, } =>
+                self.mirror_state = MirrorState::LineGot { start, end, pending_mirror, },
+            MirrorState::LineGotHighlight { start, end, mut pending_mirror, candidate_index, } => {
+                pending_mirror.insert(candidate_index);
+                self.mirror_state = MirrorState::LineGot { start, end, pending_mirror, };
+            },
         }
     }
 
     pub fn reset_mirror(&mut self) {
         self.mirror_state = MirrorState::WantStart;
+    }
+
+    pub fn apply_mirror(&mut self) {
+        match mem::replace(&mut self.mirror_state, MirrorState::WantStart) {
+            state @ MirrorState::WantStart |
+            state @ MirrorState::WantStartHighlight { .. } |
+            state @ MirrorState::WantEnd { .. } |
+            state @ MirrorState::WantEndCommit { .. } =>
+                self.mirror_state = state,
+            MirrorState::LineGot { start, end, pending_mirror, } |
+            MirrorState::LineGotHighlight { start, end, pending_mirror, .. } => {
+                let line = geo::Line {
+                    start: geo::Coordinate { x: start.0 as f64, y: start.1 as f64, },
+                    end: geo::Coordinate { x: end.0 as f64, y: end.1 as f64, },
+                };
+                for pending_index in pending_mirror {
+                    let vertex = &mut self.problem.figure.vertices[pending_index];
+                    let vertex_point = geo::Point::new(vertex.0 as f64, vertex.1 as f64);
+                    if let Some(fraction) = line.line_locate_point(&vertex_point) {
+                        if let Some(proj_point) = line.line_interpolate_point(fraction) {
+                            let rotated_vertex = vertex_point.rotate_around_point(180.0, proj_point);
+                            vertex.0 = rotated_vertex.x() as i64;
+                            vertex.1 = rotated_vertex.y() as i64;
+                            continue;
+                        }
+                    }
+                    return;
+                }
+            },
+        }
     }
 
     pub fn move_figure_left(&mut self) {
