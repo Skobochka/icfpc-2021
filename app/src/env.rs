@@ -325,27 +325,29 @@ impl Env {
             DragState::WantVertex =>
                 (),
             DragState::WantVertexHighlight { vertex_index, } => {
-                let vertex = self.problem.figure.vertices[vertex_index];
+                // let vertex = self.problem.figure.vertices[vertex_index];
                 let connected_edges: Vec<_> = self.problem
                     .figure
                     .edges
                     .iter()
                     .filter(|e| e.0 == vertex_index || e.1 == vertex_index)
                     .collect();
-                let max_edge_len = connected_edges
-                    .iter()
-                    .flat_map(|e| {
-                        Some(dist(self.problem.figure.vertices[e.0], vertex))
-                            .into_iter()
-                            .chain(Some(dist(self.problem.figure.vertices[e.1], vertex)))
-                    })
-                    .max()
-                    .unwrap();
-                let max_edge_len = (max_edge_len as f64 * 1.25) as i64;
+                // let max_edge_len = connected_edges
+                //     .iter()
+                //     .flat_map(|e| {
+                //         Some(dist(self.problem.figure.vertices[e.0], vertex))
+                //             .into_iter()
+                //             .chain(Some(dist(self.problem.figure.vertices[e.1], vertex)))
+                //     })
+                //     .max()
+                //     .unwrap();
+                // let max_edge_len = (max_edge_len as f64 * 1.25) as i64;
 
                 let mut allowed = Vec::new();
-                for try_x in vertex.0 - max_edge_len .. vertex.0 + max_edge_len {
-                    for try_y in vertex.1 - max_edge_len .. vertex.1 + max_edge_len {
+                for try_x in self.min_x as i64 ..= self.max_x as i64 {
+                    for try_y in self.min_y as i64 .. self.max_y as i64 {
+                // for try_x in vertex.0 - max_edge_len .. vertex.0 + max_edge_len {
+                //     for try_y in vertex.1 - max_edge_len .. vertex.1 + max_edge_len {
                         if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
                             continue;
                         }
@@ -537,8 +539,8 @@ impl ViewportTranslator {
     // }
 }
 
-fn dist(point_a: problem::Point, point_b: problem::Point) -> i64 {
-    let sq = (point_a.0 - point_b.0) * (point_a.0 - point_b.0) +
-        (point_a.1 - point_b.1) * (point_a.1 - point_b.1);
-    (sq as f64).sqrt() as i64
-}
+// fn dist(point_a: problem::Point, point_b: problem::Point) -> i64 {
+//     let sq = (point_a.0 - point_b.0) * (point_a.0 - point_b.0) +
+//         (point_a.1 - point_b.1) * (point_a.1 - point_b.1);
+//     (sq as f64).sqrt() as i64
+// }
