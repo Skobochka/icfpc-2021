@@ -15,8 +15,6 @@ use piston_window::{
     OpenGL,
     PistonWindow,
     WindowSettings,
-    TextureSettings,
-    Glyphs,
     PressEvent,
     Button,
     Key
@@ -87,7 +85,7 @@ fn main() -> Result<(), Error> {
 
     let mut font_path = cli_args.assets_directory;
     font_path.push("FiraSans-Regular.ttf");
-    let mut glyphs = Glyphs::new(&font_path, window.create_texture_context(), TextureSettings::new())
+    let mut glyphs = window.load_font(&font_path)
         .map_err(Error::GlyphsCreate)?;
 
     let mut env =
@@ -101,7 +99,7 @@ fn main() -> Result<(), Error> {
         .map_err(Error::EnvCreate)?;
 
     while let Some(event) = window.next() {
-        let maybe_result = window.draw_2d(&event, |context, g2d, _device| {
+        let maybe_result = window.draw_2d(&event, |context, g2d, device| {
             use piston_window::{clear, text, line, Transformed};
             clear([0.0, 0.0, 0.0, 1.0], g2d);
 
@@ -127,6 +125,10 @@ fn main() -> Result<(), Error> {
                     })
                     .map_err(Error::EnvDraw)?;
             }
+
+            // Update glyphs before rendering.
+            glyphs.factory.encoder.flush(device);
+
             Ok(())
         });
         if let Some(result) = maybe_result {
