@@ -1,7 +1,10 @@
 use geo::{
     algorithm::{
         rotate::{
-            Rotate,
+            RotatePoint,
+        },
+        centroid::{
+            Centroid,
         },
     },
 };
@@ -58,6 +61,7 @@ pub enum DrawError {
 pub enum RotateError {
     GeoExport(problem::GeoExportError),
     GeoImport(problem::GeoImportError),
+    NoCentroidBuilt,
 }
 
 impl Env {
@@ -241,7 +245,9 @@ impl Env {
         let geo_figure = self.problem.figure.export_to_geo()
             .map_err(RotateError::GeoExport)?;
 
-        let rotated_geo_figure = geo_figure.rotate(-1.0);
+        let centroid = geo_figure.centroid()
+            .ok_or(RotateError::NoCentroidBuilt)?;
+        let rotated_geo_figure = geo_figure.rotate_around_point(-1.0, centroid);
 
         for multi_line in &rotated_geo_figure {
             for point in multi_line.points_iter() {
@@ -259,7 +265,9 @@ impl Env {
         let geo_figure = self.problem.figure.export_to_geo()
             .map_err(RotateError::GeoExport)?;
 
-        let rotated_geo_figure = geo_figure.rotate(1.0);
+        let centroid = geo_figure.centroid()
+            .ok_or(RotateError::NoCentroidBuilt)?;
+        let rotated_geo_figure = geo_figure.rotate_around_point(1.0, centroid);
 
         for multi_line in &rotated_geo_figure {
             for point in multi_line.points_iter() {
