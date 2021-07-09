@@ -3,9 +3,6 @@ use geo::{
         rotate::{
             RotatePoint,
         },
-        centroid::{
-            Centroid,
-        },
     },
 };
 
@@ -245,19 +242,19 @@ impl Env {
         let geo_figure = self.problem.figure.export_to_geo()
             .map_err(RotateError::GeoExport)?;
 
-        let centroid = geo_figure.centroid()
-            .ok_or(RotateError::NoCentroidBuilt)?;
-        let rotated_geo_figure = geo_figure.rotate_around_point(-1.0, centroid);
+        let rotated_points: Vec<_> = geo_figure
+            .points
+            .iter()
+            .map(|p| p.rotate_around_point(-1.0, geo_figure.centroid))
+            .collect();
 
-        for multi_line in &rotated_geo_figure {
-            for point in multi_line.points_iter() {
-                if point.x() < self.min_x || point.x() > self.max_x || point.y() < self.min_y || point.y() > self.max_y {
-                    return Ok(());
-                }
+        for point in &rotated_points {
+            if point.x() < self.min_x || point.x() > self.max_x || point.y() < self.min_y || point.y() > self.max_y {
+                return Ok(());
             }
         }
 
-        self.problem.figure.import_from_geo(rotated_geo_figure)
+        self.problem.figure.import_from_geo(rotated_points)
             .map_err(RotateError::GeoImport)
     }
 
@@ -265,19 +262,19 @@ impl Env {
         let geo_figure = self.problem.figure.export_to_geo()
             .map_err(RotateError::GeoExport)?;
 
-        let centroid = geo_figure.centroid()
-            .ok_or(RotateError::NoCentroidBuilt)?;
-        let rotated_geo_figure = geo_figure.rotate_around_point(1.0, centroid);
+        let rotated_points: Vec<_> = geo_figure
+            .points
+            .iter()
+            .map(|p| p.rotate_around_point(1.0, geo_figure.centroid))
+            .collect();
 
-        for multi_line in &rotated_geo_figure {
-            for point in multi_line.points_iter() {
-                if point.x() < self.min_x || point.x() > self.max_x || point.y() < self.min_y || point.y() > self.max_y {
-                    return Ok(());
-                }
+        for point in &rotated_points {
+            if point.x() < self.min_x || point.x() > self.max_x || point.y() < self.min_y || point.y() > self.max_y {
+                return Ok(());
             }
         }
 
-        self.problem.figure.import_from_geo(rotated_geo_figure)
+        self.problem.figure.import_from_geo(rotated_points)
             .map_err(RotateError::GeoImport)
     }
 

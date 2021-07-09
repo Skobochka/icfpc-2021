@@ -4,6 +4,14 @@ use std::{
     path::Path,
 };
 
+use geo::{
+    algorithm::{
+        centroid::{
+            Centroid,
+        },
+    },
+};
+
 use serde_derive::{
     Serialize,
     Deserialize,
@@ -67,66 +75,50 @@ impl Problem {
 
 #[derive(Debug)]
 pub enum GeoExportError {
-    InvalidEdgeSourceIndex { edge: Edge, index: usize, },
-    InvalidEdgeTargetIndex { edge: Edge, index: usize, },
+    NoCentroidBuilt,
 }
 
 #[derive(Debug)]
 pub enum GeoImportError {
-    EdgesMismatch { expected: usize, provided: usize, },
+    PointsCountMismatch { expected: usize, provided: usize, },
     PointsInEdgeMismatch { expected: usize, provided: usize, },
 }
 
-impl Figure {
-    pub fn export_to_geo(&self) -> Result<geo::MultiLineString<f64>, GeoExportError> {
+pub struct GeoFigure {
+    pub points: Vec<geo::Point<f64>>,
+    pub centroid: geo::Point<f64>,
+}
 
-        let mut line_strings = Vec::with_capacity(self.edges.len());
-        for &edge in &self.edges {
-            let source_point = self.vertices.get(edge.0)
-                .ok_or(GeoExportError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
-            let target_point = self.vertices.get(edge.1)
-                .ok_or(GeoExportError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
-            let line_string = geo::LineString(vec![
-                geo::Coordinate { x: source_point.0 as f64, y: source_point.1 as f64, },
-                geo::Coordinate { x: target_point.0 as f64, y: target_point.1 as f64, },
-            ]);
-            line_strings.push(line_string);
+impl Figure {
+    pub fn export_to_geo(&self) -> Result<GeoFigure, GeoExportError> {
+        let mut geo_set = geo::GeometryCollection(Vec::with_capacity(self.vertices.len()));
+        for &vertex in &self.vertices {
+            geo_set.0.push(geo::Geometry::Point(geo::Point::new(vertex.0 as f64, vertex.1 as f64)));
         }
 
-        Ok(geo::MultiLineString(line_strings))
+        let centroid = geo_set.centroid()
+            .ok_or(GeoExportError::NoCentroidBuilt)?;
+
+        Ok(GeoFigure {
+            centroid,
+            points: geo_set
+                .into_iter()
+                .flat_map(|g| if let geo::Geometry::Point(p) = g { Some(p) } else { None })
+                .collect()
+        })
     }
 
-    pub fn import_from_geo(&mut self, geo_figure: geo::MultiLineString<f64>) -> Result<(), GeoImportError> {
-        if geo_figure.0.len() != self.edges.len() {
-            return Err(GeoImportError::EdgesMismatch {
-                expected: self.edges.len(),
-                provided: geo_figure.0.len(),
+    pub fn import_from_geo(&mut self, geo_figure: Vec<geo::Point<f64>>) -> Result<(), GeoImportError> {
+        if geo_figure.len() != self.vertices.len() {
+            return Err(GeoImportError::PointsCountMismatch {
+                expected: self.vertices.len(),
+                provided: geo_figure.len(),
             });
         }
 
-        for (multi_line, edge) in geo_figure.into_iter().zip(self.edges.iter()) {
-            let mut points_iter = multi_line.points_iter();
-            let source_point = points_iter.next()
-                .ok_or(GeoImportError::PointsInEdgeMismatch {
-                    expected: 2,
-                    provided: 0,
-                })?;
-            let target_point = points_iter.next()
-                .ok_or(GeoImportError::PointsInEdgeMismatch {
-                    expected: 2,
-                    provided: 1,
-                })?;
-            if !points_iter.next().is_none() {
-                return Err(GeoImportError::PointsInEdgeMismatch {
-                    expected: 2,
-                    provided: 3,
-                });
-            }
-
-            self.vertices[edge.0].0 = source_point.x() as i64;
-            self.vertices[edge.0].1 = source_point.y() as i64;
-            self.vertices[edge.1].0 = target_point.x() as i64;
-            self.vertices[edge.1].1 = target_point.y() as i64;
+        for (point, vertex) in geo_figure.into_iter().zip(self.vertices.iter_mut()) {
+            vertex.0 = point.x() as i64;
+            vertex.1 = point.y() as i64;
         }
 
         Ok(())
