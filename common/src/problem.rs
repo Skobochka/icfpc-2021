@@ -47,4 +47,79 @@ impl Problem {
         serde_json::from_reader(reader)
             .map_err(FromFileError::Deserialize)
     }
+
+    pub fn hole_polygon(&self) -> geo::Polygon<i64> {
+        geo::Polygon::new(self.hole.clone().into(), vec![])
+    }
+
 }
+
+impl From<Point> for geo::Point<i64> {
+    fn from(point: Point) -> Self {
+        geo::Point(geo::Coordinate::<i64> { x: point.0, y: point.1 })
+    }
+}
+
+impl From<Point> for geo::Coordinate<i64> {
+    fn from(point: Point) -> Self {
+        geo::Coordinate::<i64> { x: point.0, y: point.1 }
+    }
+}
+
+impl From<&Point> for geo::Coordinate<i64> {
+    fn from(point: &Point) -> Self {
+        geo::Coordinate::<i64> { x: point.0, y: point.1 }
+    }
+}
+
+impl geo::algorithm::contains::Contains<Point> for geo::Polygon<i64> {
+    fn contains(&self, point: &Point) -> bool {
+        self.contains(&geo::Coordinate::from(point))
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use geo::algorithm::contains::Contains;
+
+    #[test]
+    fn geo_type_conversion_test() {
+        let problem = Problem {
+            epsilon: 0,
+            hole: vec![ Point(0, 0), Point(10, 0), Point(10, 10), Point(0, 10) ],
+            figure: Figure {
+                edges: vec![],
+                vertices: vec![],
+            },
+        };
+
+        let p = |x, y| geo::Coordinate { x: x, y: y };
+        let ref_hole_polygon = geo::Polygon::new(
+            geo::LineString(vec![p(0, 0), p(10, 0), p(10, 10), p(0, 10) ]),
+            vec![]);
+        assert_eq!(problem.hole_polygon(), ref_hole_polygon);
+    }
+
+    #[test]
+    fn polygon_contains_test() {
+        let problem1 = Problem {
+            epsilon: 0,
+            hole: vec![ Point(0, 0), Point(10, 0), Point(10, 10), Point(0, 10) ],
+            figure: Figure {
+                edges: vec![],
+                vertices: vec![],
+            },
+        };
+
+        let hole1 = problem1.hole_polygon();
+        assert_eq!(hole1.contains(&geo::Point::from(Point(20, 20))), false);
+        assert_eq!(hole1.contains(&geo::Point::from(Point(5, 5))), true);
+        assert_eq!(hole1.contains(&Point(20, 20)), false);
+        assert_eq!(hole1.contains(&Point(5, 5)), true);
+
+    }
+}
+
