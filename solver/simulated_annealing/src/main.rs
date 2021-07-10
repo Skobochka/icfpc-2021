@@ -19,6 +19,15 @@ pub struct CliArgs {
     /// reheat maximum temperature factor [0.0 - 1.0]
     #[structopt(long = "reheat-factor", default_value = "0.33")]
     pub reheat_factor: f64,
+    /// iterations count per one cooling step
+    #[structopt(long = "iterations-per-cooling-step", default_value = "32768")]
+    pub iterations_per_cooling_step: usize,
+    /// addition probability of valid edge mutation
+    #[structopt(long = "valid-edge-accept-prob", default_value = "0.5")]
+    pub valid_edge_accept_prob: f64,
+    /// cooling step base temperature
+    #[structopt(long = "cooling-step-temp", default_value = "1.0")]
+    pub cooling_step_temp: f64,
 }
 
 
@@ -43,10 +52,10 @@ fn main() -> Result<(), Error> {
             .map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,
-            cooling_step_temp: 1.0,
+            cooling_step_temp: cli_args.cooling_step_temp,
             minimum_temp: 2.0,
-            valid_edge_accept_prob: 0.5,
-            iterations_per_cooling_step: 10000,
+            valid_edge_accept_prob: cli_args.valid_edge_accept_prob,
+            iterations_per_cooling_step: cli_args.iterations_per_cooling_step,
         },
     );
 
