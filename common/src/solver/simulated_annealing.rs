@@ -57,6 +57,10 @@ impl SimulatedAnnealingSolver {
         self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur);
     }
 
+    pub fn reheat(&mut self, temp_factor: f64) {
+        self.temp = self.params.max_temp * temp_factor;
+    }
+
     pub fn temp(&self) -> f64 {
         self.temp
     }
@@ -105,16 +109,16 @@ impl SimulatedAnnealingSolver {
             if rng.gen_range(0.0 .. 1.0) < accept_prob {
                 // accept
 
-                log::debug!(
-                    "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, q_cur = {:?}, q_tmp = {:?}, accept_prob = {:?}",
-                    self.vertices_cur[vertex_index],
-                    self.vertices_tmp[vertex_index],
-                    self.fitness_cur,
-                    fitness_tmp,
-                    q_cur,
-                    q_tmp,
-                    accept_prob,
-                );
+                // log::debug!(
+                //     "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, q_cur = {:?}, q_tmp = {:?}, accept_prob = {:?}",
+                //     self.vertices_cur[vertex_index],
+                //     self.vertices_tmp[vertex_index],
+                //     self.fitness_cur,
+                //     fitness_tmp,
+                //     q_cur,
+                //     q_tmp,
+                //     accept_prob,
+                // );
 
                 self.vertices_cur[vertex_index] =
                     self.vertices_tmp[vertex_index];
