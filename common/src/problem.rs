@@ -124,7 +124,7 @@ impl Problem {
                     start: geo::Coordinate::from(pose.vertices[*from_idx]),
                     end: geo::Coordinate::from(pose.vertices[*to_idx])
                 };
-                if geo_hole.contains(&geo_edge) {
+                if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
                     None
                 }
                 else {
