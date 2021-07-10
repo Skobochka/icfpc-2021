@@ -20,11 +20,12 @@ pub struct SimulatedAnnealingSolver {
     vertices_tmp: Vec<problem::Point>,
     fitness_cur: Fitness,
     temp: f64,
+    steps: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Fitness {
-    FigureCorrupted { ratio_sum: f64, },
+    FigureCorrupted { ratio_avg: f64, },
     NotFitHole { bad_edges_count: usize, },
     FigureScored { score: i64, },
 }
@@ -38,6 +39,9 @@ impl SimulatedAnnealingSolver {
     pub fn new(solver: solver::Solver, params: Params) -> SimulatedAnnealingSolver {
         let mut vertices_cur = Vec::new();
         generate_vertices(&solver, &mut vertices_cur);
+
+        // let vertices_cur = solver.problem.figure.vertices.clone();
+
         let temp = params.max_temp;
         let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur);
 
@@ -48,12 +52,14 @@ impl SimulatedAnnealingSolver {
             vertices_tmp: Vec::new(),
             fitness_cur,
             temp,
+            steps: 0,
         }
     }
 
     pub fn reset(&mut self) {
         generate_vertices(&self.solver, &mut self.vertices_cur);
         self.temp = self.params.max_temp;
+        self.steps = 0;
         self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur);
     }
 
@@ -87,15 +93,15 @@ impl SimulatedAnnealingSolver {
             let vertex = self.vertices_tmp[vertex_index];
 
             let moved_vertex = loop {
-                let mut dx = self.solver.field_width as f64 * self.temp / self.params.max_temp;
-                if dx < 1.0 { dx = 1.0; }
-                let mut dy = self.solver.field_height as f64 * self.temp / self.params.max_temp;
-                if dy < 1.0 { dy = 1.0; }
-                let x = rng.gen_range(vertex.0 - dx as i64 ..= vertex.0 + dx as i64);
-                let y = rng.gen_range(vertex.1 - dy as i64 ..= vertex.1 + dy as i64);
+                // let mut dx = self.solver.field_width as f64 * self.temp / self.params.max_temp;
+                // if dx < 1.0 { dx = 1.0; }
+                // let mut dy = self.solver.field_height as f64 * self.temp / self.params.max_temp;
+                // if dy < 1.0 { dy = 1.0; }
+                // let x = rng.gen_range(vertex.0 - dx as i64 ..= vertex.0 + dx as i64);
+                // let y = rng.gen_range(vertex.1 - dy as i64 ..= vertex.1 + dy as i64);
 
-                // let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
-                // let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
+                let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
+                let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
                 let try_vertex = problem::Point(x, y);
                 if try_vertex != vertex && self.solver.is_hole(&try_vertex) {
                     break try_vertex;
@@ -105,9 +111,9 @@ impl SimulatedAnnealingSolver {
             let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp);
 
             let energy_cur = self.fitness_cur.energy();
-            let q_cur = energy_cur * self.params.max_temp * 10.0;
+            let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
             let energy_tmp = fitness_tmp.energy();
-            let q_tmp = energy_tmp * self.params.max_temp * 10.0;
+            let q_tmp = energy_tmp * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
 
             let accept_prob = if q_tmp < q_cur {
                 1.0
@@ -117,16 +123,16 @@ impl SimulatedAnnealingSolver {
             if rng.gen_range(0.0 .. 1.0) < accept_prob {
                 // accept
 
-                // log::debug!(
-                //     "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, q_cur = {:?}, q_tmp = {:?}, accept_prob = {:?}",
-                //     self.vertices_cur[vertex_index],
-                //     self.vertices_tmp[vertex_index],
-                //     self.fitness_cur,
-                //     fitness_tmp,
-                //     q_cur,
-                //     q_tmp,
-                //     accept_prob,
-                // );
+                log::debug!(
+                    "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, q_cur = {:?}, q_tmp = {:?}, accept_prob = {:?}",
+                    self.vertices_cur[vertex_index],
+                    self.vertices_tmp[vertex_index],
+                    self.fitness_cur,
+                    fitness_tmp,
+                    q_cur,
+                    q_tmp,
+                    accept_prob,
+                );
 
                 self.vertices_cur[vertex_index] =
                     self.vertices_tmp[vertex_index];
@@ -138,7 +144,10 @@ impl SimulatedAnnealingSolver {
             }
         }
 
-        self.temp -= self.params.cooling_step_temp;
+        let temp_delta = (self.temp * 2.0 / self.params.max_temp) * self.params.cooling_step_temp;
+
+        self.temp -= temp_delta;
+        self.steps += 1;
         Ok(())
     }
 }
@@ -200,7 +209,9 @@ impl Fitness {
                     Fitness::NotFitHole { bad_edges_count: not_fit_edges.len(), },
             }
         } else {
-            Fitness::FigureCorrupted { ratio_sum, }
+            Fitness::FigureCorrupted {
+                ratio_avg: ratio_sum / problem.figure.edges.len() as f64,
+            }
         }
     }
 
@@ -212,11 +223,11 @@ impl Fitness {
                 2.0 - (1.0 / score as f64),
             &Fitness::NotFitHole { bad_edges_count, } =>
                 3.0 - (1.0 / bad_edges_count as f64),
-            &Fitness::FigureCorrupted { ratio_sum, } =>
-                if ratio_sum < 1.0 {
-                    3.0 + ratio_sum
+            &Fitness::FigureCorrupted { ratio_avg, } =>
+                if ratio_avg < 1.0 {
+                    3.0 + ratio_avg
                 } else {
-                    5.0 - (1.0 / ratio_sum)
+                    5.0 - (1.0 / ratio_avg)
                 },
         }
     }

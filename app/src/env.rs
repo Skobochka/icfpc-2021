@@ -490,7 +490,7 @@ impl Env {
                 max_temp: 100.0,
                 cooling_step_temp: 1.0,
                 minimum_temp: 2.0,
-                iterations_per_cooling_step: 1000,
+                iterations_per_cooling_step: 100,
             },
         );
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
@@ -506,7 +506,7 @@ impl Env {
                     Ok(()) =>
                         (),
                     Err(solver::simulated_annealing::StepError::TempTooLow) =>
-                        solver.reheat(0.5),
+                        solver.reheat(0.33),
                 }
                 Ok(())
             },
