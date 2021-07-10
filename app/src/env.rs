@@ -679,9 +679,7 @@ impl Env {
     }
 
     pub fn update_angles(&mut self) {
-        let mut problem = self.initial_problem.clone();
-        problem.figure.vertices = self.problem.figure.vertices.clone();
-        self.allowed_angles = problem.possible_rotations();
+        self.allowed_angles = self.initial_problem.possible_rotations_for_vertices(&self.problem.figure.vertices);
         log::debug!("possible rotations around centroid: {:?}", self.allowed_angles);
     }
 

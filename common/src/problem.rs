@@ -193,6 +193,26 @@ impl Problem {
         }
         angles
     }
+
+    pub fn possible_rotations_for_vertices(&self, vertices: &Vec<Point>) -> Vec<f64> {
+        let mut angles = vec![];
+        let mut figure = self.figure.clone();
+        figure.vertices = vertices.clone();
+        let geo_figure = figure.export_to_geo().unwrap();
+        for angle in 1..360 {
+            // log::debug!("checking angle {}", angle);
+            let mut new_geo_figure = geo_figure.clone();
+            new_geo_figure.rotate_around_centroid_mut(angle as f64);
+            let mut new_figure = self.figure.clone();
+            new_figure.import_from_geo(new_geo_figure.points).unwrap();
+            match self.score_vertices(&new_figure.vertices) {
+                Err(PoseValidationError::BrokenEdgesFound(_)) |
+                Err(PoseValidationError::VerticeCountMismatch) => continue,
+                _ => { angles.push(angle as f64); }
+            }
+        }
+        angles
+    }
 }
 
 #[derive(Debug)]
