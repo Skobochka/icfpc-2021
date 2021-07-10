@@ -65,7 +65,7 @@ impl Solver {
         for y in field_min.1 .. field_max.1 {
             for x in field_min.0 .. field_max.0 {
                 if hole_poly.contains(&problem::Point(x, y)) {
-                    let mask_index = y * field_width + x;
+                    let mask_index = (y - field_min.1) * field_width + (x - field_min.0);
                     hole_mask.set(mask_index as usize, true);
                 }
             }
@@ -86,7 +86,7 @@ impl Solver {
         if point.0 < self.field_min.0 || point.0 > self.field_max.0 || point.1 < self.field_min.1 || point.1 > self.field_max.1 {
             return false;
         }
-        let mask_index = point.1 * self.field_width + point.0;
+        let mask_index = (point.1 - self.field_min.1) * self.field_width + (point.0 - self.field_min.0);
         self.hole_mask.get(mask_index as usize)
             .unwrap_or(false)
     }
