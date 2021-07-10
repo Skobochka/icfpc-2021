@@ -305,7 +305,7 @@ impl Env {
                             (mouse_cursor[1] - vertex_y) * (mouse_cursor[1] - vertex_y);
                         if sq_dist < 32.0 {
                             draw_element(draw::DrawElement::Ellipse {
-                                color: [1.0, 0.0, 0.0, 1.0],
+                                color: [0.0, 1.0, 0.0, 1.0],
                                 x: vertex.0 as f64,
                                 y: vertex.1 as f64,
                                 width: 16.0,
@@ -318,7 +318,7 @@ impl Env {
                                     AllowedMove::FoldVertex { .. } =>
                                         [1.0, 0.0, 0.0, 1.0],
                                     AllowedMove::ChooseEdge { .. } =>
-                                        [0.0, 1.0, 1.0, 1.0],
+                                        [1.0, 1.0, 0.0, 1.0],
                                 },
                                 x: vertex.0 as f64,
                                 y: vertex.1 as f64,
@@ -334,8 +334,58 @@ impl Env {
                     }
                 },
                 DragState::WantEdgeTarget { edge, allowed, } |
-                DragState::WantEdgeTargetHighlight { edge, allowed, .. } =>
-                    todo!(),
+                DragState::WantEdgeTargetHighlight { edge, allowed, .. } => {
+                    draw_element(draw::DrawElement::Line {
+                        color: [1., 0., 0., 1.,],
+                        radius: 2.0,
+                        source_x: self.problem.figure.vertices[edge.0].0 as f64,
+                        source_y: self.problem.figure.vertices[edge.0].1 as f64,
+                        target_x: self.problem.figure.vertices[edge.1].0 as f64,
+                        target_y: self.problem.figure.vertices[edge.1].1 as f64,
+                    });
+                    let mut highlight = None;
+                    for &(p, q) in &allowed {
+
+                        draw_element(draw::DrawElement::Line {
+                            color: [1., 0., 0., 1.,],
+                            radius: 2.0,
+                            source_x: p.0 as f64,
+                            source_y: p.1 as f64,
+                            target_x: q.0 as f64,
+                            target_y: q.1 as f64,
+                        });
+
+                        let vertex = p;
+                        let vertex_x = tr.x(vertex.0 as f64);
+                        let vertex_y = tr.y(vertex.1 as f64);
+                        let sq_dist =
+                            (mouse_cursor[0] - vertex_x) * (mouse_cursor[0] - vertex_x) +
+                            (mouse_cursor[1] - vertex_y) * (mouse_cursor[1] - vertex_y);
+                        if sq_dist < 32.0 {
+                            draw_element(draw::DrawElement::Ellipse {
+                                color: [0.0, 1.0, 0.0, 1.0],
+                                x: vertex.0 as f64,
+                                y: vertex.1 as f64,
+                                width: 16.0,
+                                height: 16.0,
+                            });
+                            highlight = Some((p, q));
+                        } else {
+                            draw_element(draw::DrawElement::Ellipse {
+                                color: [1.0, 0.0, 0.0, 1.0],
+                                x: vertex.0 as f64,
+                                y: vertex.1 as f64,
+                                width: 16.0,
+                                height: 16.0,
+                            });
+                        }
+                    }
+                    if let Some(candidate) = highlight {
+                        self.drag_state = DragState::WantEdgeTargetHighlight { edge, allowed, candidate, };
+                    } else {
+                        self.drag_state = DragState::WantEdgeTarget { edge, allowed, };
+                    }
+                },
 
             }
         }
@@ -411,11 +461,85 @@ impl Env {
                 self.problem.figure.vertices[vertex_index] = target;
                 self.import_solution(self.export_solution());
             },
-            DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::ChooseEdge { other_index, }, .. } =>
+            DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::ChooseEdge { other_index, }, .. } => {
+                let mut allowed = Vec::new();
+                let connected_edges: Vec<_> = self.problem
+                    .figure
+                    .edges
+                    .iter()
+                    .filter(|e| e.0 == vertex_index || e.1 == vertex_index || e.0 == other_index || e.1 == other_index)
+                    .collect();
+                let vp = self.problem.figure.vertices[vertex_index];
+                let vq = self.problem.figure.vertices[other_index];
+
+                for try_x in self.min_x as i64 ..= self.max_x as i64 {
+                    for try_y in self.min_y as i64 .. self.max_y as i64 {
+                        if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
+                            continue;
+                        }
+                        let oth_x = try_x + (vq.0 - vp.0);
+                        let oth_y = try_y + (vq.1 - vp.1);
+                        if (oth_x as f64) < self.min_x || (oth_x as f64) > self.max_x || (oth_y as f64) < self.min_y || (oth_y as f64) > self.max_y {
+                            continue;
+                        }
+                        let try_vertex = problem::Point(try_x, try_y);
+                        let oth_vertex = problem::Point(oth_x, oth_y);
+
+                        let mut is_ok = true;
+                        for edge in &connected_edges {
+                            let sample_vertex_a = self.original_pose.vertices[edge.0];
+                            let sample_vertex_b = self.original_pose.vertices[edge.1];
+
+                            let px = if edge.0 == vertex_index {
+                                try_x
+                            } else if edge.0 == other_index {
+                                oth_x
+                            } else {
+                                self.problem.figure.vertices[edge.0].0
+                            };
+                            let py = if edge.0 == vertex_index {
+                                try_y
+                            } else if edge.0 == other_index {
+                                oth_y
+                            } else {
+                                self.problem.figure.vertices[edge.0].1
+                            };
+                            let qx = if edge.1 == vertex_index {
+                                try_x
+                            } else if edge.1 == other_index {
+                                oth_x
+                            } else {
+                                self.problem.figure.vertices[edge.1].0
+                            };
+                            let qy = if edge.1 == vertex_index {
+                                try_y
+                            } else if edge.1 == other_index {
+                                oth_y
+                            } else {
+                                self.problem.figure.vertices[edge.1].1
+                            };
+
+                            let orig_sq_dist = (sample_vertex_a.0 - sample_vertex_b.0) * (sample_vertex_a.0 - sample_vertex_b.0)
+                                + (sample_vertex_a.1 - sample_vertex_b.1) * (sample_vertex_a.1 - sample_vertex_b.1);
+                            let try_sq_dist = (px - qx) * (px - qx) + (py - qy) * (py - qy);
+
+                            let ratio = ((try_sq_dist as f64 / orig_sq_dist as f64) - 1.0).abs();
+                            if ratio > self.problem.epsilon as f64 / 1000000.0 {
+                                is_ok = false;
+                                break;
+                            }
+                        }
+                        if is_ok {
+                            allowed.push((try_vertex, oth_vertex));
+                        }
+                    }
+                }
+
                 self.drag_state = DragState::WantEdgeTarget {
                     edge: problem::Edge(vertex_index, other_index),
-                    allowed: Vec::new(),
-                },
+                    allowed,
+                };
+            },
             DragState::WantEdgeTarget { edge, allowed, } =>
                 self.drag_state = DragState::WantEdgeTarget { edge, allowed, },
             DragState::WantEdgeTargetHighlight { edge, candidate: (p, q), .. } => {
