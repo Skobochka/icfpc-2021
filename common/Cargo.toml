@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 log = "^0.4"
+rand = "^0.8"
 serde = "^1.0"
 bit-vec = "^0.6"
 structopt = "^0.3"

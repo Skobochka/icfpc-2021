@@ -4,7 +4,8 @@ use crate::{
     problem,
 };
 
-#[allow(dead_code)]
+pub mod simulated_annealing;
+
 pub struct Solver {
     hole_mask: bit_vec::BitVec,
     field_min: problem::Point,
@@ -12,6 +13,7 @@ pub struct Solver {
     field_area: usize,
     field_width: i64,
     field_height: i64,
+    problem: problem::Problem,
 }
 
 #[derive(Debug)]
@@ -75,6 +77,16 @@ impl Solver {
             field_area,
             field_width,
             field_height,
+            problem: problem.clone(),
         })
+    }
+
+    pub fn is_hole(&self, point: &problem::Point) -> bool {
+        if point.0 < self.field_min.0 || point.0 > self.field_max.0 || point.1 < self.field_min.1 || point.1 > self.field_max.1 {
+            return false;
+        }
+        let mask_index = point.1 * self.field_width + point.0;
+        self.hole_mask.get(mask_index as usize)
+            .unwrap_or(false)
     }
 }
