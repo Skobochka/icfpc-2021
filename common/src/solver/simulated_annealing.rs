@@ -81,35 +81,38 @@ impl SimulatedAnnealingSolver {
         for _ in 0 .. self.params.iterations_per_cooling_step {
             let vertex_index = rng.gen_range(0 .. self.vertices_tmp.len());
 
-            let moved_point = loop {
+            let moved_vertex = loop {
                 let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
                 let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
-                let point = problem::Point(x, y);
-                if self.solver.is_hole(&point) {
-                    break point;
+                let vertex = problem::Point(x, y);
+                if vertex != self.vertices_tmp[vertex_index] && self.solver.is_hole(&vertex) {
+                    break vertex;
                 }
             };
-            self.vertices_tmp[vertex_index] = moved_point;
+            self.vertices_tmp[vertex_index] = moved_vertex;
             let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp);
 
             let energy_cur = self.fitness_cur.energy();
+            let q_cur = energy_cur * self.params.max_temp * 10.0;
             let energy_tmp = fitness_tmp.energy();
-            let accept_prob = if energy_tmp < energy_cur {
+            let q_tmp = energy_tmp * self.params.max_temp * 10.0;
+
+            let accept_prob = if q_tmp < q_cur {
                 1.0
             } else {
-                (-(energy_tmp - energy_cur) / self.temp).exp()
+                (-(q_tmp - q_cur) / self.temp).exp()
             };
             if rng.gen_range(0.0 .. 1.0) < accept_prob {
                 // accept
 
                 log::debug!(
-                    "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, energy_cur = {:?}, energy_tmp = {:?}, accept_prob = {:?}",
+                    "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, q_cur = {:?}, q_tmp = {:?}, accept_prob = {:?}",
                     self.vertices_cur[vertex_index],
                     self.vertices_tmp[vertex_index],
                     self.fitness_cur,
                     fitness_tmp,
-                    energy_cur,
-                    energy_tmp,
+                    q_cur,
+                    q_tmp,
                     accept_prob,
                 );
 
@@ -198,7 +201,11 @@ impl Fitness {
             &Fitness::NotFitHole { bad_edges_count, } =>
                 3.0 - (1.0 / bad_edges_count as f64),
             &Fitness::FigureCorrupted { ratio_sum, } =>
-                4.0 - (1.0 / ratio_sum),
+                if ratio_sum < 1.0 {
+                    3.0 + ratio_sum
+                } else {
+                    5.0 - (1.0 / ratio_sum)
+                },
         }
     }
 }
