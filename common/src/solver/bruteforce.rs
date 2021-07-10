@@ -71,7 +71,7 @@ impl BruteforceSolver {
 
                     match self.solver.problem.score_vertices(vertices) {
                         Ok(score) => {
-                            log::debug!("Found solution with score {:?}: {:?}", score, vertices);
+                            // log::debug!("Found solution with score {:?}: {:?}", score, vertices);
                             if score == 0 { // perfect solution found
                                 return (0, Some(problem::Pose {
                                     vertices: vertices.clone(),
@@ -120,7 +120,7 @@ impl BruteforceSolver {
             distances[to_idx*vertices.len() + from_idx] = distance;
         }
 
-        log::debug!("distance matrix: {:?}", distances);
+        // log::debug!("distance matrix: {:?}", distances);
         let (score, pose) = self.run(self.solver.field_min, 0, i64::MAX, &mut vertices, &distances);
         println!("Found solution with score {:?}: {:?}", score, pose);
         pose
