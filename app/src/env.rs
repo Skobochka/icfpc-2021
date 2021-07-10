@@ -39,6 +39,7 @@ pub struct Env {
     score_state: ScoringState,
     drag_state: DragState,
     allowed_angles: Vec<f64>,
+    selected_angle: Option<f64>,
 }
 
 #[derive(Debug)]
@@ -173,6 +174,7 @@ impl Env {
             original_pose: problem.export_pose(),
             initial_problem: problem.clone(),
             allowed_angles: problem.possible_rotations(),
+            selected_angle: None,
             problem,
             min_x: min_x - ((max_x - min_x) / 2.0),
             min_y: min_y - ((max_y - min_y) / 2.0),
@@ -205,7 +207,7 @@ impl Env {
 
     pub fn console_text(&self) -> String {
         format!(
-            "move: W/A/S/D, rotate: Z/X, export pose: E, drag: {}, {}, angles: {:?}",
+            "move: W/A/S/D, rotate: Z/X, next/prev angle: C/V, export pose: E, drag: {}, {}, sel.angle: {}, angles: {:?}",
             match self.drag_state {
                 DragState::WantVertex |
                 DragState::WantVertexHighlight { .. } =>
@@ -223,6 +225,10 @@ impl Env {
                 ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
                 ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
                 ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
+            },
+            match self.selected_angle {
+                None => "<n/a>".to_string(),
+                Some(a) => format!("{}", a),
             },
             self.allowed_angles,
         )
@@ -571,8 +577,7 @@ impl Env {
         }
 
         self.rescore_solution();
-        // move does not break allowed angles
-        // self.update_angles();
+        self.update_angles();
     }
 
     pub fn move_figure_right(&mut self) {
@@ -586,8 +591,7 @@ impl Env {
         }
 
         self.rescore_solution();
-        // move does not break allowed angles
-        // self.update_angles();
+        self.update_angles();
     }
 
     pub fn move_figure_upper(&mut self) {
@@ -601,8 +605,7 @@ impl Env {
         }
 
         self.rescore_solution();
-        // move does not break allowed angles
-        // self.update_angles();
+        self.update_angles();
     }
 
     pub fn move_figure_lower(&mut self) {
@@ -616,18 +619,21 @@ impl Env {
         }
 
         self.rescore_solution();
-        // move does not break allowed angles
-        // self.update_angles();
+        self.update_angles();
     }
 
     pub fn rotate_figure_left(&mut self) -> Result<(), RotateError> {
+        if self.selected_angle.is_none() {
+            return Ok(());
+        }
+
         let geo_figure = self.problem.figure.export_to_geo()
             .map_err(RotateError::GeoExport)?;
 
         let rotated_points: Vec<_> = geo_figure
             .points
             .iter()
-            .map(|p| p.rotate_around_point(-15.0, geo_figure.centroid))
+            .map(|p| p.rotate_around_point(-self.selected_angle.unwrap(), geo_figure.centroid))
             .collect();
 
         for point in &rotated_points {
@@ -641,17 +647,22 @@ impl Env {
 
         self.rescore_solution();
         self.update_angles();
+        self.select_next_angle();
         Ok(())
     }
 
     pub fn rotate_figure_right(&mut self) -> Result<(), RotateError> {
+        if self.selected_angle.is_none() {
+            return Ok(());
+        }
+
         let geo_figure = self.problem.figure.export_to_geo()
             .map_err(RotateError::GeoExport)?;
 
         let rotated_points: Vec<_> = geo_figure
             .points
             .iter()
-            .map(|p| p.rotate_around_point(15.0, geo_figure.centroid))
+            .map(|p| p.rotate_around_point(self.selected_angle.unwrap(), geo_figure.centroid))
             .collect();
 
         for point in &rotated_points {
@@ -664,6 +675,7 @@ impl Env {
             .map_err(RotateError::GeoImport)?;
         self.rescore_solution();
         self.update_angles();
+        self.select_next_angle();
         Ok(())
     }
 
@@ -681,6 +693,62 @@ impl Env {
     pub fn update_angles(&mut self) {
         self.allowed_angles = self.initial_problem.possible_rotations_for_vertices(&self.problem.figure.vertices);
         log::debug!("possible rotations around centroid: {:?}", self.allowed_angles);
+    }
+
+    pub fn select_next_angle(&mut self) {
+        if self.allowed_angles.len() == 0 {
+            self.selected_angle = None;
+            return;
+        }
+
+        match self.selected_angle {
+            None => {
+                self.selected_angle = Some(self.allowed_angles[0]);
+            },
+            Some(selected_angle) => {
+                match self.allowed_angles.iter().position(|&angle| angle == selected_angle) {
+                    None => {
+                        self.selected_angle = Some(self.allowed_angles[0]);
+                    },
+                    Some(angle_idx) => {
+                        let mut next_idx = angle_idx + 1;
+                        if next_idx >= self.allowed_angles.len() {
+                            next_idx = 0;
+                        }
+                        self.selected_angle = Some(self.allowed_angles[next_idx]);
+                    }
+
+                }
+            },
+        }
+    }
+
+    pub fn select_prev_angle(&mut self) {
+        if self.allowed_angles.len() == 0 {
+            self.selected_angle = None;
+            return;
+        }
+
+        match self.selected_angle {
+            None => {
+                self.selected_angle = Some(self.allowed_angles[0]);
+            },
+            Some(selected_angle) => {
+                match self.allowed_angles.iter().position(|&angle| angle == selected_angle) {
+                    None => {
+                        self.selected_angle = Some(self.allowed_angles[0]);
+                    },
+                    Some(angle_idx) => {
+                        let mut next_idx = angle_idx as isize - 1;
+                        if next_idx < 0 {
+                            next_idx = self.allowed_angles.len() as isize - 1;
+                        }
+                        self.selected_angle = Some(self.allowed_angles[next_idx as usize]);
+                    }
+
+                }
+            },
+        }
     }
 
     pub fn update_score_state(&mut self, score: Result<i64, problem::PoseValidationError>) {

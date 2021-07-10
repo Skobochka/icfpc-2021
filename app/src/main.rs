@@ -179,6 +179,11 @@ fn main() -> Result<(), Error> {
                 env.rotate_figure_left().map_err(Error::EnvRotate)?,
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::X), state: ButtonState::Release, .. }), _timestamp) =>
                 env.rotate_figure_right().map_err(Error::EnvRotate)?,
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::C), state: ButtonState::Release, .. }), _timestamp) =>
+                env.select_next_angle(),
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::V), state: ButtonState::Release, .. }), _timestamp) =>
+                env.select_prev_angle(),
+
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::E), state: ButtonState::Release, .. }), _timestamp) => {
                 let pose = env.export_solution();
                 pose.write_to_file(&cli_args.common.pose_file)
