@@ -171,6 +171,10 @@ impl Env {
         let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
             solver::Solver::new(&problem)
                 .map_err(CreateError::SolverCreate)?,
+            solver::simulated_annealing::Params {
+                max_temp: 100.0,
+                cooling_step_temp: 1.0,
+            },
         );
 
         Ok(Env {
