@@ -23,45 +23,64 @@ use serde_derive::{
     Deserialize,
 };
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub struct Point(pub i64, pub i64);
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub struct Edge(pub usize, pub usize);
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub struct Problem {
     pub hole: Vec<Point>,
     pub figure: Figure,
     pub epsilon: u64,
-    pub bonuses: Option<Vec<Bonus>>,
+    pub bonuses: Option<Vec<ProblemBonus>>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub struct Figure {
     pub edges: Vec<Edge>,
     pub vertices: Vec<Point>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub struct Pose {
     pub vertices: Vec<Point>,
+    pub bonuses: Option<Vec<PoseBonus>>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Bonus {
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
+pub struct ProblemBonus {
     pub position: Point,
-    pub bonus: BonusType,
+    pub bonus: ProblemBonusType,
     pub problem: ProblemId,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum BonusType {
-
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
+pub enum ProblemBonusType {
+    #[serde(rename = "BREAK_A_LEG")]
+    BreakALeg,
+    #[serde(rename = "GLOBALIST")]
+    Globalist,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ProblemId(pub String);
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
+pub struct ProblemId(pub usize);
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[serde(tag = "bonus")]
+pub enum PoseBonus {
+    #[serde(rename = "BREAK_A_LEG")]
+    BreakALeg {
+        problem: ProblemId,
+        edge: Edge,
+    },
+    #[serde(rename = "GLOBALIST")]
+    Globalist {
+        problem: ProblemId,
+    },
+}
+
 
 #[derive(Debug)]
 pub enum FromFileError {
@@ -94,6 +113,7 @@ impl Problem {
     pub fn export_pose(&self) -> Pose {
         Pose {
             vertices: self.figure.vertices.clone(),
+            bonuses: None,
         }
     }
 
@@ -394,6 +414,7 @@ mod tests {
                 edges: vec![],
                 vertices: vec![],
             },
+            bonuses: None,
         };
 
         let p = |x, y| geo::Coordinate { x: x, y: y };
@@ -412,6 +433,7 @@ mod tests {
                 edges: vec![],
                 vertices: vec![],
             },
+            bonuses: None,
         };
 
         let hole1 = problem1.hole_polygon();
@@ -426,5 +448,54 @@ mod tests {
         assert_eq!(hole1.contains(&Point(10, 10)), true);
         assert_eq!(hole1.contains(&Point(0, 10)), true);
 
+    }
+
+    #[test]
+    fn deserialize_problem_bonus_break_a_leg() {
+        let data = r#"{"bonus":"BREAK_A_LEG","problem":28,"position":[43,44]}"#;
+        assert_eq!(
+            serde_json::from_str::<ProblemBonus>(data).unwrap(),
+            ProblemBonus {
+                position: Point(43, 44),
+                bonus: ProblemBonusType::BreakALeg,
+                problem: ProblemId(28),
+            },
+        );
+    }
+
+    #[test]
+    fn deserialize_problem_bonus_globalist() {
+        let data = r#"{"bonus":"GLOBALIST","problem":70,"position":[106,85]}"#;
+        assert_eq!(
+            serde_json::from_str::<ProblemBonus>(data).unwrap(),
+            ProblemBonus {
+                position: Point(106, 85),
+                bonus: ProblemBonusType::Globalist,
+                problem: ProblemId(70),
+            },
+        );
+    }
+
+    #[test]
+    fn deserialize_pose_bonus_globalist() {
+        let data = r#"{"bonus":"GLOBALIST","problem":70}"#;
+        assert_eq!(
+            serde_json::from_str::<PoseBonus>(data).unwrap(),
+            PoseBonus::Globalist {
+                problem: ProblemId(70),
+            },
+        );
+    }
+
+    #[test]
+    fn deserialize_pose_bonus_break_a_leg() {
+        let data = r#"{"bonus":"BREAK_A_LEG","problem":70,"edge":[0, 2]}"#;
+        assert_eq!(
+            serde_json::from_str::<PoseBonus>(data).unwrap(),
+            PoseBonus::BreakALeg {
+                problem: ProblemId(70),
+                edge: Edge(0, 2),
+            },
+        );
     }
 }
