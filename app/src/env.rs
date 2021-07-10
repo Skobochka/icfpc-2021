@@ -151,6 +151,11 @@ impl Env {
             .max()
             .ok_or(CreateError::NoPointsInFigure)?;
 
+        let min_x = if min_x_hole > min_x_figure { min_x_figure } else { min_x_hole } as f64;
+        let min_y = if min_y_hole > min_y_figure { min_y_figure } else { min_y_hole } as f64;
+        let max_x = if max_x_hole < max_x_figure { max_x_figure } else { max_x_hole } as f64;
+        let max_y = if max_y_hole < max_y_figure { max_y_figure } else { max_y_hole } as f64;
+
         Ok(Env {
             screen_width,
             screen_height,
@@ -159,10 +164,10 @@ impl Env {
             original_pose: problem.export_pose(),
             initial_problem: problem.clone(),
             problem,
-            min_x: if min_x_hole > min_x_figure { min_x_figure } else { min_x_hole } as f64,
-            min_y: if min_y_hole > min_y_figure { min_y_figure } else { min_y_hole } as f64,
-            max_x: if max_x_hole < max_x_figure { max_x_figure } else { max_x_hole } as f64,
-            max_y: if max_y_hole < max_y_figure { max_y_figure } else { max_y_hole } as f64,
+            min_x: min_x - ((max_x - min_x) / 2.0),
+            min_y: min_y - ((max_y - min_y) / 2.0),
+            max_x: max_x + ((max_x - min_x) / 2.0),
+            max_y: max_y + ((max_x - min_x) / 2.0),
             mouse_cursor: None,
             score_state: ScoringState::Unscored,
             drag_state: DragState::WantVertex,
