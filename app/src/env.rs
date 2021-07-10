@@ -40,7 +40,14 @@ pub struct Env {
     drag_state: DragState,
     allowed_angles: Vec<f64>,
     selected_angle: Option<f64>,
-    solver: solver::simulated_annealing::SimulatedAnnealingSolver,
+    solver_mode: SolverMode,
+}
+
+enum SolverMode {
+    None,
+    SimulatedAnnealing {
+        solver: solver::simulated_annealing::SimulatedAnnealingSolver,
+    },
 }
 
 #[derive(Debug)]
@@ -72,6 +79,10 @@ pub struct ViewportTranslator {
 pub enum CreateError {
     NoPointsInHole,
     NoPointsInFigure,
+}
+
+#[derive(Debug)]
+pub enum SimulatedAnnealingSolverError {
     SolverCreate(solver::CreateError),
 }
 
@@ -168,15 +179,6 @@ impl Env {
         let max_x = if max_x_hole < max_x_figure { max_x_figure } else { max_x_hole } as f64;
         let max_y = if max_y_hole < max_y_figure { max_y_figure } else { max_y_hole } as f64;
 
-        let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-            solver::Solver::new(&problem)
-                .map_err(CreateError::SolverCreate)?,
-            solver::simulated_annealing::Params {
-                max_temp: 100.0,
-                cooling_step_temp: 1.0,
-            },
-        );
-
         Ok(Env {
             screen_width,
             screen_height,
@@ -194,7 +196,7 @@ impl Env {
             mouse_cursor: None,
             score_state: ScoringState::Unscored,
             drag_state: DragState::WantVertex,
-            solver,
+            solver_mode: SolverMode::None,
         })
     }
 
@@ -435,6 +437,19 @@ impl Env {
             }
         }
 
+        Ok(())
+    }
+
+    pub fn enter_solver_simulated_annealing(&mut self) -> Result<(), SimulatedAnnealingSolverError> {
+        let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
+            solver::Solver::new(&self.problem)
+                .map_err(SimulatedAnnealingSolverError::SolverCreate)?,
+            solver::simulated_annealing::Params {
+                max_temp: 100.0,
+                cooling_step_temp: 1.0,
+            },
+        );
+        self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
         Ok(())
     }
 
