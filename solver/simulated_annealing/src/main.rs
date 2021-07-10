@@ -66,7 +66,7 @@ fn main() -> Result<(), Error> {
             Ok(()) =>
                 (),
             Err(solver::simulated_annealing::StepError::TempTooLow) if reheats_count < cli_args.max_reheats_count => {
-                log::info!("temperature is too low: performing reheat ({} left)", reheats_count);
+                log::info!("temperature is too low: performing reheat ({} left)", cli_args.max_reheats_count - reheats_count);
                 solver.reheat(cli_args.reheat_factor);
                 reheats_count += 1;
             },
