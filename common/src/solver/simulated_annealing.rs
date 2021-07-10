@@ -5,47 +5,46 @@ use crate::{
     problem,
 };
 
-#[allow(dead_code)]
 pub struct SimulatedAnnealingSolver {
     solver: solver::Solver,
+    vertices: Vec<problem::Point>,
 }
 
 impl SimulatedAnnealingSolver {
     pub fn new(solver: solver::Solver) -> SimulatedAnnealingSolver {
+        let vertices = generate_init_vertices(&solver);
         SimulatedAnnealingSolver {
             solver,
-        }
-    }
-
-    pub fn start(self) -> SimulatedAnnealingSolverStart {
-        let figure_vertices_iter = self.solver
-            .problem
-            .figure
-            .vertices
-            .iter();
-        let mut rng = rand::thread_rng();
-        let vertices = figure_vertices_iter
-            .map(|_vertex| {
-                loop {
-                    let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
-                    let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
-                    let point = problem::Point(x, y);
-                    if self.solver.is_hole(&point) {
-                        break point;
-                    }
-                }
-            })
-            .collect();
-
-        SimulatedAnnealingSolverStart {
-            solver: self.solver,
             vertices,
         }
     }
+
+    pub fn reset(&mut self) {
+        self.vertices = generate_init_vertices(&self.solver);
+    }
+
+    pub fn vertices(&self) -> &[problem::Point] {
+        &self.vertices
+    }
 }
 
-#[allow(dead_code)]
-pub struct SimulatedAnnealingSolverStart {
-    solver: solver::Solver,
-    vertices: Vec<problem::Point>,
+fn generate_init_vertices(solver: &solver::Solver) -> Vec<problem::Point> {
+    let figure_vertices_iter = solver
+        .problem
+        .figure
+        .vertices
+        .iter();
+    let mut rng = rand::thread_rng();
+    figure_vertices_iter
+        .map(|_vertex| {
+            loop {
+                let x = rng.gen_range(solver.field_min.0 ..= solver.field_max.1);
+                let y = rng.gen_range(solver.field_min.1 ..= solver.field_max.1);
+                let point = problem::Point(x, y);
+                if solver.is_hole(&point) {
+                    break point;
+                }
+            }
+        })
+        .collect()
 }

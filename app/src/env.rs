@@ -16,13 +16,13 @@ use piston_window::{
 
 use common::{
     problem,
+    solver,
 };
 
 use crate::{
     draw,
 };
 
-#[derive(Debug)]
 pub struct Env {
     screen_width: u32,
     screen_height: u32,
@@ -40,6 +40,7 @@ pub struct Env {
     drag_state: DragState,
     allowed_angles: Vec<f64>,
     selected_angle: Option<f64>,
+    solver: solver::simulated_annealing::SimulatedAnnealingSolver,
 }
 
 #[derive(Debug)]
@@ -71,6 +72,7 @@ pub struct ViewportTranslator {
 pub enum CreateError {
     NoPointsInHole,
     NoPointsInFigure,
+    SolverCreate(solver::CreateError),
 }
 
 #[derive(Debug)]
@@ -166,6 +168,11 @@ impl Env {
         let max_x = if max_x_hole < max_x_figure { max_x_figure } else { max_x_hole } as f64;
         let max_y = if max_y_hole < max_y_figure { max_y_figure } else { max_y_hole } as f64;
 
+        let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
+            solver::Solver::new(&problem)
+                .map_err(CreateError::SolverCreate)?,
+        );
+
         Ok(Env {
             screen_width,
             screen_height,
@@ -183,6 +190,7 @@ impl Env {
             mouse_cursor: None,
             score_state: ScoringState::Unscored,
             drag_state: DragState::WantVertex,
+            solver,
         })
     }
 
