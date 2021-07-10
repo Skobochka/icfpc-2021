@@ -34,6 +34,7 @@ pub struct Problem {
     pub hole: Vec<Point>,
     pub figure: Figure,
     pub epsilon: u64,
+    pub bonuses: Option<Vec<Bonus>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -46,6 +47,21 @@ pub struct Figure {
 pub struct Pose {
     pub vertices: Vec<Point>,
 }
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Bonus {
+    pub position: Point,
+    pub bonus: BonusType,
+    pub problem: ProblemId,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum BonusType {
+
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ProblemId(pub String);
 
 #[derive(Debug)]
 pub enum FromFileError {
