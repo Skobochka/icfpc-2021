@@ -138,10 +138,21 @@ fn main() -> Result<(), Error> {
                     &tr,
                     |element| {
                         match element {
-                            draw::DrawElement::Line { color, radius, source_x, source_y, target_x, target_y } =>
+                            draw::DrawElement::Line { color, radius, source_x, source_y, target_x, target_y, } =>
                                 line(color, radius, [tr.x(source_x), tr.y(source_y), tr.x(target_x), tr.y(target_y)], context.transform, g2d),
                             draw::DrawElement::Ellipse { color, x, y, width, height, } =>
                                 ellipse(color, [tr.x(x) - (width / 2.0), tr.y(y) - (height / 2.0), width, height], context.transform, g2d),
+                            draw::DrawElement::Text { color, size, text, x, y } => {
+                                text::Text::new_color(color, size)
+                                    .draw(
+                                        &text,
+                                        &mut glyphs,
+                                        &context.draw_state,
+                                        context.transform.trans_pos([tr.x(x), tr.y(y)]),
+                                        g2d,
+                                    )
+                                    .ok();
+                            },
                         }
                     })
                     .map_err(Error::EnvDraw)?;

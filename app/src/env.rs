@@ -265,6 +265,30 @@ impl Env {
             });
         }
 
+        if let Some(bonuses) = self.problem.bonuses.as_ref() {
+            for bonus in bonuses {
+                draw_element(draw::DrawElement::Ellipse {
+                    color: [0.4, 0.7, 0.3, 0.85],
+                    x: bonus.position.0 as f64,
+                    y: bonus.position.1 as f64,
+                    width: 16.0,
+                    height: 16.0,
+                });
+                draw_element(draw::DrawElement::Text {
+                    color: [1.0, 1.0, 1.0, 1.0],
+                    size: 16,
+                    text: match bonus.bonus {
+                        problem::ProblemBonusType::BreakALeg =>
+                            "break_a_leg".to_string(),
+                        problem::ProblemBonusType::Globalist =>
+                            "globalist".to_string(),
+                    },
+                    x: bonus.position.0 as f64,
+                    y: bonus.position.1 as f64,
+                });
+            }
+        }
+
         if let Some(mouse_cursor) = self.mouse_cursor {
             match mem::replace(&mut self.drag_state, DragState::WantVertex) {
                 DragState::WantVertex |

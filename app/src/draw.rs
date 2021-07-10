@@ -16,4 +16,11 @@ pub enum DrawElement {
         width: f64,
         height: f64,
     },
+    Text {
+        color: [f32; 4],
+        size: u32,
+        text: String,
+        x: f64,
+        y: f64,
+    },
 }

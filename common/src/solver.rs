@@ -4,6 +4,7 @@ use crate::{
     problem,
 };
 
+#[allow(dead_code)]
 pub struct Solver {
     hole_mask: bit_vec::BitVec,
     field_min: problem::Point,
