@@ -5,6 +5,7 @@ use crate::{
     problem,
 };
 
+#[allow(dead_code)]
 pub struct SimulatedAnnealingSolver {
     solver: solver::Solver,
 }
@@ -43,6 +44,7 @@ impl SimulatedAnnealingSolver {
     }
 }
 
+#[allow(dead_code)]
 pub struct SimulatedAnnealingSolverStart {
     solver: solver::Solver,
     vertices: Vec<problem::Point>,

@@ -6,6 +6,7 @@ use crate::{
 
 pub mod simulated_annealing;
 
+#[allow(dead_code)]
 pub struct Solver {
     hole_mask: bit_vec::BitVec,
     field_min: problem::Point,
