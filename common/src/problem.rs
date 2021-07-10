@@ -260,8 +260,8 @@ impl Figure {
         }
 
         for (point, vertex) in geo_figure.into_iter().zip(self.vertices.iter_mut()) {
-            vertex.0 = point.x() as i64;
-            vertex.1 = point.y() as i64;
+            vertex.0 = point.x().round() as i64;
+            vertex.1 = point.y().round() as i64;
         }
 
         Ok(())
