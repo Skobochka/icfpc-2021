@@ -3,4 +3,5 @@ members = [
     "app",
     "common",
     "solver/bruteforce",
+    "solver/simulated_annealing",
 ]

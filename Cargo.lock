@@ -1747,6 +1747,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "simulated_annealing"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "log",
+ "pretty_env_logger",
+ "structopt",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
