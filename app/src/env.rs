@@ -490,7 +490,8 @@ impl Env {
                 max_temp: 100.0,
                 cooling_step_temp: 1.0,
                 minimum_temp: 2.0,
-                iterations_per_cooling_step: 100,
+                valid_edge_accept_prob: 0.5,
+                iterations_per_cooling_step: 10000,
             },
         );
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
@@ -888,7 +889,15 @@ impl Env {
     }
 
     pub fn export_solution(&self) -> problem::Pose {
-        self.problem.export_pose()
+        match &self.solver_mode {
+            SolverMode::None =>
+                self.problem.export_pose(),
+            SolverMode::SimulatedAnnealing { solver, } =>
+                problem::Pose {
+                    vertices: solver.vertices().to_vec(),
+                    bonuses: None,
+                },
+        }
     }
 
     pub fn figure_reset(&mut self) {
