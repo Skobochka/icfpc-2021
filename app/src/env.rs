@@ -44,8 +44,16 @@ pub struct Env {
 enum DragState {
     WantVertex,
     WantVertexHighlight { vertex_index: usize, },
-    WantTarget { vertex_index: usize, allowed: Vec<problem::Point>, },
-    WantTargetHighlight { vertex_index: usize, allowed: Vec<problem::Point>, candidate: problem::Point, },
+    WantTarget { vertex_index: usize, allowed: Vec<AllowedMove>, },
+    WantTargetHighlight { vertex_index: usize, allowed: Vec<AllowedMove>, candidate: AllowedMove, },
+    WantEdgeTarget { edge: problem::Edge, allowed: Vec<(problem::Point, problem::Point)>, },
+    WantEdgeTargetHighlight { edge: problem::Edge, allowed: Vec<(problem::Point, problem::Point)>, candidate: (problem::Point, problem::Point), },
+}
+
+#[derive(Clone, Copy, Debug)]
+enum AllowedMove {
+    FoldVertex { target: problem::Point, },
+    ChooseEdge { other_index: usize, },
 }
 
 pub struct ViewportTranslator {
@@ -202,7 +210,10 @@ impl Env {
                     "choose vertex".to_string(),
                 DragState::WantTarget { .. } |
                 DragState::WantTargetHighlight { .. } =>
-                    "choose new vertex position (M to reset)".to_string(),
+                    "choose new vertex position or edge (M to reset)".to_string(),
+                DragState::WantEdgeTarget { .. } |
+                DragState::WantEdgeTargetHighlight { .. } =>
+                    "choose new edge position (M to reset)".to_string(),
             },
             match &self.score_state {
                 ScoringState::Unscored => "<unscored>".to_string(),
@@ -280,7 +291,13 @@ impl Env {
                         height: 16.0,
                     });
                     let mut highlight = None;
-                    for &vertex in &allowed {
+                    for &allowed_move in &allowed {
+                        let vertex = match allowed_move {
+                            AllowedMove::FoldVertex { target, } =>
+                                target,
+                            AllowedMove::ChooseEdge { other_index, } =>
+                                self.problem.figure.vertices[other_index],
+                        };
                         let vertex_x = tr.x(vertex.0 as f64);
                         let vertex_y = tr.y(vertex.1 as f64);
                         let sq_dist =
@@ -294,10 +311,15 @@ impl Env {
                                 width: 16.0,
                                 height: 16.0,
                             });
-                            highlight = Some(vertex);
+                            highlight = Some(allowed_move);
                         } else {
                             draw_element(draw::DrawElement::Ellipse {
-                                color: [1.0, 0.0, 0.0, 1.0],
+                                color: match allowed_move {
+                                    AllowedMove::FoldVertex { .. } =>
+                                        [1.0, 0.0, 0.0, 1.0],
+                                    AllowedMove::ChooseEdge { .. } =>
+                                        [0.0, 1.0, 1.0, 1.0],
+                                },
                                 x: vertex.0 as f64,
                                 y: vertex.1 as f64,
                                 width: 16.0,
@@ -311,6 +333,10 @@ impl Env {
                         self.drag_state = DragState::WantTarget { vertex_index, allowed, };
                     }
                 },
+                DragState::WantEdgeTarget { edge, allowed, } |
+                DragState::WantEdgeTargetHighlight { edge, allowed, .. } =>
+                    todo!(),
+
             }
         }
 
@@ -330,29 +356,24 @@ impl Env {
             DragState::WantVertex =>
                 (),
             DragState::WantVertexHighlight { vertex_index, } => {
-                // let vertex = self.problem.figure.vertices[vertex_index];
+                let mut allowed = Vec::new();
                 let connected_edges: Vec<_> = self.problem
                     .figure
                     .edges
                     .iter()
                     .filter(|e| e.0 == vertex_index || e.1 == vertex_index)
                     .collect();
-                // let max_edge_len = connected_edges
-                //     .iter()
-                //     .flat_map(|e| {
-                //         Some(dist(self.problem.figure.vertices[e.0], vertex))
-                //             .into_iter()
-                //             .chain(Some(dist(self.problem.figure.vertices[e.1], vertex)))
-                //     })
-                //     .max()
-                //     .unwrap();
-                // let max_edge_len = (max_edge_len as f64 * 1.25) as i64;
+                for edge in &connected_edges {
+                    if edge.0 != vertex_index {
+                        allowed.push(AllowedMove::ChooseEdge { other_index: edge.0, });
+                    }
+                    if edge.1 != vertex_index {
+                        allowed.push(AllowedMove::ChooseEdge { other_index: edge.1, });
+                    }
+                }
 
-                let mut allowed = Vec::new();
                 for try_x in self.min_x as i64 ..= self.max_x as i64 {
                     for try_y in self.min_y as i64 .. self.max_y as i64 {
-                // for try_x in vertex.0 - max_edge_len .. vertex.0 + max_edge_len {
-                //     for try_y in vertex.1 - max_edge_len .. vertex.1 + max_edge_len {
                         if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
                             continue;
                         }
@@ -377,7 +398,7 @@ impl Env {
                             }
                         }
                         if is_ok {
-                            allowed.push(try_vertex);
+                            allowed.push(AllowedMove::FoldVertex { target: try_vertex, });
                         }
                     }
                 }
@@ -386,8 +407,20 @@ impl Env {
             },
             DragState::WantTarget { vertex_index, allowed, } =>
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, },
-            DragState::WantTargetHighlight { vertex_index, candidate, .. } => {
-                self.problem.figure.vertices[vertex_index] = candidate;
+            DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::FoldVertex { target, }, .. } => {
+                self.problem.figure.vertices[vertex_index] = target;
+                self.import_solution(self.export_solution());
+            },
+            DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::ChooseEdge { other_index, }, .. } =>
+                self.drag_state = DragState::WantEdgeTarget {
+                    edge: problem::Edge(vertex_index, other_index),
+                    allowed: Vec::new(),
+                },
+            DragState::WantEdgeTarget { edge, allowed, } =>
+                self.drag_state = DragState::WantEdgeTarget { edge, allowed, },
+            DragState::WantEdgeTargetHighlight { edge, candidate: (p, q), .. } => {
+                self.problem.figure.vertices[edge.0] = p;
+                self.problem.figure.vertices[edge.1] = q;
                 self.import_solution(self.export_solution());
             },
         }
