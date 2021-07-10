@@ -84,13 +84,21 @@ impl SimulatedAnnealingSolver {
         let mut rng = rand::thread_rng();
         for _ in 0 .. self.params.iterations_per_cooling_step {
             let vertex_index = rng.gen_range(0 .. self.vertices_tmp.len());
+            let vertex = self.vertices_tmp[vertex_index];
 
             let moved_vertex = loop {
-                let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
-                let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
-                let vertex = problem::Point(x, y);
-                if vertex != self.vertices_tmp[vertex_index] && self.solver.is_hole(&vertex) {
-                    break vertex;
+                let mut dx = self.solver.field_width as f64 * self.temp / self.params.max_temp;
+                if dx < 1.0 { dx = 1.0; }
+                let mut dy = self.solver.field_height as f64 * self.temp / self.params.max_temp;
+                if dy < 1.0 { dy = 1.0; }
+                let x = rng.gen_range(vertex.0 - dx as i64 ..= vertex.0 + dx as i64);
+                let y = rng.gen_range(vertex.1 - dy as i64 ..= vertex.1 + dy as i64);
+
+                // let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
+                // let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
+                let try_vertex = problem::Point(x, y);
+                if try_vertex != vertex && self.solver.is_hole(&try_vertex) {
+                    break try_vertex;
                 }
             };
             self.vertices_tmp[vertex_index] = moved_vertex;

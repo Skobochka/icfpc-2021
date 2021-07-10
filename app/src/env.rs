@@ -309,6 +309,13 @@ impl Env {
                         width: 16.0,
                         height: 16.0,
                     });
+                    draw_element(draw::DrawElement::Ellipse {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        x: target_point.0 as f64,
+                        y: target_point.1 as f64,
+                        width: 16.0,
+                        height: 16.0,
+                    });
                 }
 
             },
