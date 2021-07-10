@@ -1,6 +1,8 @@
 #!/bin/bash
 
-for i in `seq 1 59`
+API_TOKEN=29a3adf2-b0d3-4166-8891-9c990df11546
+
+for i in `seq 1 78`
 do
-    wget -c https://poses.live/problems/$i/download
+    curl -H "Authorization: Bearer $API_TOKEN" https://poses.live/api/problems/$i -o $i.problem
 done
