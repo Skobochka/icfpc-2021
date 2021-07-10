@@ -19,7 +19,7 @@ impl BruteforceSolver {
     fn run(&self,
            start: problem::Point, vert_idx: usize, last_best: i64,
            vertices: &mut Vec<problem::Point>,
-           distances: &[(i64, i64)]) -> (i64, Option<problem::Pose>) {
+           distances: &[i64]) -> (i64, Option<problem::Pose>) {
 
         // the last vertex left. brute-forcing...
         let mut new_pose = None;
@@ -35,14 +35,14 @@ impl BruteforceSolver {
                 }
 
                 for idx in 0..vert_idx {
-                    let (dmin, dmax) = distances[vert_idx*vertices.len()+idx];
+                    let edge_distance = distances[vert_idx*vertices.len()+idx];
                     // log::debug!("vert_idx: {}, idx: {}, dmin: {}, dmax: {}", vert_idx, idx, dmin, dmax);
-                    if dmin == -1 {
+                    if edge_distance == -1 {
                         continue;
                     }
                     let distance = problem::distance(&vertice, &vertices[idx]);
-                    // log::debug!("found edge, distance: {}", distance);
-                    if distance < dmin || distance > dmax {
+
+                    if ((distance as f64 / edge_distance as f64) - 1_f64).abs() > self.solver.problem.epsilon as f64 / 1000000_f64 {
                         continue 'loop_x;
                     }
                 }
@@ -85,14 +85,12 @@ impl BruteforceSolver {
     pub fn solve(&self) -> Option<problem::Pose> {
         let start = self.solver.field_min;
         let mut vertices = self.solver.problem.figure.vertices.clone();
-        let mut distances = vec![(-1, -1); vertices.len() * vertices.len()];
+        let mut distances = vec![-1; vertices.len() * vertices.len()];
 
         for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
-            let distance = problem::distance(&vertices[from_idx], &vertices[to_idx]) as f64;
-            let dmin = (distance * (0.5_f64 - self.solver.problem.epsilon as f64 / 1000000.0)).round() as i64;
-            let dmax = (distance * (1.5_f64 + self.solver.problem.epsilon as f64 / 1000000.0)).round() as i64;
-            distances[from_idx*vertices.len() + to_idx] = (dmin, dmax);
-            distances[to_idx*vertices.len() + from_idx] = (dmin, dmax);
+            let distance = problem::distance(&vertices[from_idx], &vertices[to_idx]);
+            distances[from_idx*vertices.len() + to_idx] = distance;
+            distances[to_idx*vertices.len() + from_idx] = distance;
         }
 
         log::debug!("distance matrix: {:?}", distances);
