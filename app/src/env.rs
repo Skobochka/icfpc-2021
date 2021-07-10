@@ -16,13 +16,13 @@ use piston_window::{
 
 use common::{
     problem,
+    solver,
 };
 
 use crate::{
     draw,
 };
 
-#[derive(Debug)]
 pub struct Env {
     screen_width: u32,
     screen_height: u32,
@@ -40,6 +40,14 @@ pub struct Env {
     drag_state: DragState,
     allowed_angles: Vec<f64>,
     selected_angle: Option<f64>,
+    solver_mode: SolverMode,
+}
+
+enum SolverMode {
+    None,
+    SimulatedAnnealing {
+        solver: solver::simulated_annealing::SimulatedAnnealingSolver,
+    },
 }
 
 #[derive(Debug)]
@@ -71,6 +79,12 @@ pub struct ViewportTranslator {
 pub enum CreateError {
     NoPointsInHole,
     NoPointsInFigure,
+}
+
+#[derive(Debug)]
+pub enum SimulatedAnnealingSolverError {
+    SolverCreate(solver::CreateError),
+    SolverStep(solver::simulated_annealing::StepError),
 }
 
 #[derive(Debug)]
@@ -183,6 +197,7 @@ impl Env {
             mouse_cursor: None,
             score_state: ScoringState::Unscored,
             drag_state: DragState::WantVertex,
+            solver_mode: SolverMode::None,
         })
     }
 
@@ -206,32 +221,37 @@ impl Env {
     }
 
     pub fn console_text(&self) -> String {
-        format!(
-            "move: W/A/S/D, rotate: Z/X, next/prev angle: C/V, export pose: E, drag: {}, {}, sel.angle: {}, angles: {:?}",
-            match self.drag_state {
-                DragState::WantVertex |
-                DragState::WantVertexHighlight { .. } =>
-                    "choose vertex".to_string(),
-                DragState::WantTarget { .. } |
-                DragState::WantTargetHighlight { .. } =>
-                    "choose new vertex position or edge (M to reset)".to_string(),
-                DragState::WantEdgeTarget { .. } |
-                DragState::WantEdgeTargetHighlight { .. } =>
-                    "choose new edge position (M to reset)".to_string(),
-            },
-            match &self.score_state {
-                ScoringState::Unscored => "<unscored>".to_string(),
-                ScoringState::Ok(score) => format!("score: {}", score),
-                ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
-                ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
-                ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
-            },
-            match self.selected_angle {
-                None => "<n/a>".to_string(),
-                Some(a) => format!("{}", a),
-            },
-            self.allowed_angles,
-        )
+        match &self.solver_mode {
+            SolverMode::None =>
+                format!(
+                    "move: W/A/S/D, rotate: Z/X, next/prev angle: C/V, export pose: E, drag: {}, {}, sel.angle: {}, angles: {:?}",
+                    match self.drag_state {
+                        DragState::WantVertex |
+                        DragState::WantVertexHighlight { .. } =>
+                            "choose vertex".to_string(),
+                        DragState::WantTarget { .. } |
+                        DragState::WantTargetHighlight { .. } =>
+                            "choose new vertex position or edge (M to reset)".to_string(),
+                        DragState::WantEdgeTarget { .. } |
+                        DragState::WantEdgeTargetHighlight { .. } =>
+                            "choose new edge position (M to reset)".to_string(),
+                    },
+                    match &self.score_state {
+                        ScoringState::Unscored => "<unscored>".to_string(),
+                        ScoringState::Ok(score) => format!("score: {}", score),
+                        ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
+                        ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
+                        ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
+                    },
+                    match self.selected_angle {
+                        None => "<n/a>".to_string(),
+                        Some(a) => format!("{}", a),
+                    },
+                    self.allowed_angles,
+                ),
+            SolverMode::SimulatedAnnealing { solver, } =>
+                format!("exit solver: Y, step: I, temp: {}, fitness: {:?}, energy: {}", solver.temp(), solver.fitness(), solver.fitness().energy()),
+        }
     }
 
     pub fn draw<DF>(&mut self, tr: &ViewportTranslator, mut draw_element: DF) -> Result<(), DrawError> where DF: FnMut(draw::DrawElement) {
@@ -250,19 +270,55 @@ impl Env {
             prev_point = point;
         }
 
-        for &edge in &self.problem.figure.edges {
-            let source_point = self.problem.figure.vertices.get(edge.0)
-                .ok_or(DrawError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
-            let target_point = self.problem.figure.vertices.get(edge.1)
-                .ok_or(DrawError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
-            draw_element(draw::DrawElement::Line {
-                color: [1., 1., 0., 1.,],
-                radius: 0.5,
-                source_x: source_point.0 as f64,
-                source_y: source_point.1 as f64,
-                target_x: target_point.0 as f64,
-                target_y: target_point.1 as f64,
-            });
+        match &self.solver_mode {
+            SolverMode::None => {
+                for &edge in &self.problem.figure.edges {
+                    let source_point = self.problem.figure.vertices.get(edge.0)
+                        .ok_or(DrawError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
+                    let target_point = self.problem.figure.vertices.get(edge.1)
+                        .ok_or(DrawError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
+                    draw_element(draw::DrawElement::Line {
+                        color: [1., 1., 0., 1.,],
+                        radius: 0.5,
+                        source_x: source_point.0 as f64,
+                        source_y: source_point.1 as f64,
+                        target_x: target_point.0 as f64,
+                        target_y: target_point.1 as f64,
+                    });
+                }
+            },
+            SolverMode::SimulatedAnnealing { solver, } => {
+                let solver_vertices = solver.vertices();
+                for &edge in &self.problem.figure.edges {
+                    let source_point = solver_vertices.get(edge.0)
+                        .ok_or(DrawError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
+                    let target_point = solver_vertices.get(edge.1)
+                        .ok_or(DrawError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
+                    draw_element(draw::DrawElement::Line {
+                        color: [1., 1., 0., 1.,],
+                        radius: 0.5,
+                        source_x: source_point.0 as f64,
+                        source_y: source_point.1 as f64,
+                        target_x: target_point.0 as f64,
+                        target_y: target_point.1 as f64,
+                    });
+                    draw_element(draw::DrawElement::Ellipse {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        x: source_point.0 as f64,
+                        y: source_point.1 as f64,
+                        width: 16.0,
+                        height: 16.0,
+                    });
+                    draw_element(draw::DrawElement::Ellipse {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        x: target_point.0 as f64,
+                        y: target_point.1 as f64,
+                        width: 16.0,
+                        height: 16.0,
+                    });
+                }
+
+            },
         }
 
         if let Some(bonuses) = self.problem.bonuses.as_ref() {
@@ -424,6 +480,42 @@ impl Env {
         }
 
         Ok(())
+    }
+
+    pub fn enter_solver_simulated_annealing(&mut self) -> Result<(), SimulatedAnnealingSolverError> {
+        let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
+            solver::Solver::new(&self.problem)
+                .map_err(SimulatedAnnealingSolverError::SolverCreate)?,
+            solver::simulated_annealing::Params {
+                max_temp: 100.0,
+                cooling_step_temp: 1.0,
+                minimum_temp: 2.0,
+                valid_edge_accept_prob: 0.5,
+                iterations_per_cooling_step: 10000,
+            },
+        );
+        self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
+        Ok(())
+    }
+
+    pub fn step_solver_simulated_annealing(&mut self) -> Result<(), SimulatedAnnealingSolverError> {
+        match &mut self.solver_mode {
+            SolverMode::None =>
+                Ok(()),
+            SolverMode::SimulatedAnnealing { solver, } => {
+                match solver.step() {
+                    Ok(()) =>
+                        (),
+                    Err(solver::simulated_annealing::StepError::TempTooLow) =>
+                        solver.reheat(0.33),
+                }
+                Ok(())
+            },
+        }
+    }
+
+    pub fn exit_solver(&mut self) {
+        self.solver_mode = SolverMode::None;
     }
 
     pub fn update_mouse_cursor(&mut self, position: [f64; 2]) {
@@ -797,7 +889,15 @@ impl Env {
     }
 
     pub fn export_solution(&self) -> problem::Pose {
-        self.problem.export_pose()
+        match &self.solver_mode {
+            SolverMode::None =>
+                self.problem.export_pose(),
+            SolverMode::SimulatedAnnealing { solver, } =>
+                problem::Pose {
+                    vertices: solver.vertices().to_vec(),
+                    bonuses: None,
+                },
+        }
     }
 
     pub fn figure_reset(&mut self) {

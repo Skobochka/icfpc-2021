@@ -72,6 +72,7 @@ pub enum Error {
     PistonDraw2d(Box<dyn std::error::Error>),
     PoseExport(problem::WriteFileError),
     PoseScoring(problem::PoseValidationError),
+    SimulatedAnnealingSolver(env::SimulatedAnnealingSolverError),
 }
 
 fn main() -> Result<(), Error> {
@@ -203,6 +204,18 @@ fn main() -> Result<(), Error> {
             },
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::R), state: ButtonState::Release, .. }), _timestamp) =>
                 env.figure_reset(),
+
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::U), state: ButtonState::Release, .. }), _timestamp) => {
+                env.enter_solver_simulated_annealing()
+                    .map_err(Error::SimulatedAnnealingSolver)?;
+            },
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::Y), state: ButtonState::Release, .. }), _timestamp) =>
+                env.exit_solver(),
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::I), state: ButtonState::Release, .. }), _timestamp) => {
+                env.step_solver_simulated_annealing()
+                    .map_err(Error::SimulatedAnnealingSolver)?;
+            },
+
             _ =>
                 (),
         }

@@ -131,7 +131,7 @@ impl Problem {
         geo::Polygon::new(self.hole.clone().into(), vec![])
     }
 
-    pub fn score_vertices(&self, pose_vertices: &Vec<Point>) -> Result<i64, PoseValidationError> {
+    pub fn score_vertices(&self, pose_vertices: &[Point]) -> Result<i64, PoseValidationError> {
         // Check (a): connectivity. As our app does not change include edges in Pose,
         // we just check that the new Pose inclues the same number of vertices as the original
         if self.figure.vertices.len() != pose_vertices.len() {
