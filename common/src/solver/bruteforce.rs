@@ -24,6 +24,9 @@ impl BruteforceSolver {
         let mut new_pose = None;
         let mut best_score = last_best;
         for next_y in start.1..self.solver.field_max.1 {
+            if vert_idx < 2 {
+                log::debug!("Starting Y-step {} for idx: {}...", next_y, vert_idx);
+            }
             for next_x in start.0..self.solver.field_max.0 {
                 let vertice = problem::Point(next_x, next_y);
                 if !self.solver.is_hole(&vertice) {
@@ -35,6 +38,7 @@ impl BruteforceSolver {
                 if vert_idx == vertices.len() - 1 {
                     match self.solver.problem.score_vertices(vertices) {
                         Ok(score) => {
+                            log::debug!("Found solution with score {:?}: {:?}", score, vertices);
                             if score < best_score {
                                 best_score = score;
                                 new_pose = Some(problem::Pose {
@@ -54,6 +58,10 @@ impl BruteforceSolver {
                     }
                 }
             }
+            if vert_idx < 2 {
+                log::debug!("Passed Y-step {} for idx: {}", next_y, vert_idx);
+            }
+
         }
 
         (best_score, new_pose)
