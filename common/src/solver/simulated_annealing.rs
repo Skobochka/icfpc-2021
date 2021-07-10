@@ -27,7 +27,7 @@ pub struct SimulatedAnnealingSolver {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Fitness {
     FigureCorrupted { ratio_avg: f64, },
-    NotFitHole { bad_edges_count: usize, },
+    NotFitHole { bad_edges_count: usize, ratio_avg: f64, },
     FigureScored { score: i64, },
 }
 
@@ -195,6 +195,7 @@ impl Fitness {
             if !is_valid { is_ok = false; }
             ratio_sum += ratio;
         }
+        let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
         if is_ok {
             match problem.score_vertices(vertices) {
                 Ok(score) =>
@@ -204,12 +205,10 @@ impl Fitness {
                 Err(problem::PoseValidationError::BrokenEdgesFound(broken_edges)) =>
                     panic!("unexpected PoseValidationError::Broken_Edges on broken_edges = {:?}", broken_edges),
                 Err(problem::PoseValidationError::EdgesNotFitHole(not_fit_edges)) =>
-                    Fitness::NotFitHole { bad_edges_count: not_fit_edges.len(), },
+                    Fitness::NotFitHole { bad_edges_count: not_fit_edges.len(), ratio_avg, },
             }
         } else {
-            Fitness::FigureCorrupted {
-                ratio_avg: ratio_sum / problem.figure.edges.len() as f64,
-            }
+            Fitness::FigureCorrupted { ratio_avg, }
         }
     }
 
@@ -219,14 +218,14 @@ impl Fitness {
                 0.0,
             &Fitness::FigureScored { score, } =>
                 2.0 - (1.0 / score as f64),
-            &Fitness::NotFitHole { bad_edges_count, } =>
-                3.0 - (1.0 / bad_edges_count as f64),
             &Fitness::FigureCorrupted { ratio_avg, } =>
                 if ratio_avg < 1.0 {
-                    3.0 + ratio_avg
+                    2.0 + ratio_avg
                 } else {
-                    5.0 - (1.0 / ratio_avg)
+                    4.0 - (1.0 / ratio_avg)
                 },
+            &Fitness::NotFitHole { bad_edges_count, ratio_avg, } =>
+                5.0 - (1.0 / bad_edges_count as f64) + ratio_avg,
         }
     }
 }
