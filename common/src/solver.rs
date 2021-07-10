@@ -91,3 +91,31 @@ impl Solver {
             .unwrap_or(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use geo::algorithm::contains::Contains;
+
+    use crate::{
+        problem,
+        solver::{
+            Solver,
+        },
+    };
+
+    #[test]
+    fn is_hole() {
+        let problem_data = r#"{"bonuses":[{"bonus":"GLOBALIST","problem":72,"position":[17,10]}],"hole":[[34,0],[17,30],[10,62],[13,30],[0,0]],"epsilon":6731,"figure":{"edges":[[0,1],[0,3],[1,2],[1,3],[2,4],[3,4]],"vertices":[[0,0],[0,34],[17,62],[30,17],[45,46]]}}"#;
+        let problem: problem::Problem = serde_json::from_str(problem_data).unwrap();
+        let solver = Solver::new(&problem).unwrap();
+        let hole_poly = problem.hole_polygon();
+        for y in solver.field_min.1 .. solver.field_max.1 {
+            for x in solver.field_min.0 .. solver.field_max.0 {
+                let required = hole_poly.contains(&problem::Point(x, y));
+                let provided = solver.is_hole(&problem::Point(x, y));
+                assert_eq!(required, provided);
+            }
+        }
+
+    }
+}
