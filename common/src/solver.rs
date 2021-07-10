@@ -56,14 +56,14 @@ impl Solver {
                 .max()
                 .unwrap(),
         );
-        let field_width = field_max.0 - field_min.0;
-        let field_height = field_max.1 - field_min.1;
+        let field_width = field_max.0 - field_min.0 + 1;
+        let field_height = field_max.1 - field_min.1 + 1;
         let field_area = (field_width * field_height) as usize;
         let mut hole_mask = bit_vec::BitVec::from_elem(field_area, false);
 
         let hole_poly = problem.hole_polygon();
-        for y in field_min.1 .. field_max.1 {
-            for x in field_min.0 .. field_max.0 {
+        for y in field_min.1 ..= field_max.1 {
+            for x in field_min.0 ..= field_max.0 {
                 if hole_poly.contains(&problem::Point(x, y)) {
                     let mask_index = (y - field_min.1) * field_width + (x - field_min.0);
                     hole_mask.set(mask_index as usize, true);
@@ -109,13 +109,28 @@ mod tests {
         let problem: problem::Problem = serde_json::from_str(problem_data).unwrap();
         let solver = Solver::new(&problem).unwrap();
         let hole_poly = problem.hole_polygon();
-        for y in solver.field_min.1 .. solver.field_max.1 {
-            for x in solver.field_min.0 .. solver.field_max.0 {
+        for y in solver.field_min.1 ..= solver.field_max.1 {
+            for x in solver.field_min.0 ..= solver.field_max.0 {
                 let required = hole_poly.contains(&problem::Point(x, y));
                 let provided = solver.is_hole(&problem::Point(x, y));
                 assert_eq!(required, provided);
             }
         }
+    }
 
+    #[test]
+    fn is_hole_task13() {
+        let problem_data = r#"{"bonuses":[{"bonus":"GLOBALIST","problem":46,"position":[20,20]}],"hole":[[20,0],[40,20],[20,40],[0,20]],"epsilon":2494,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[15,21],[34,0],[0,45],[19,24]]}}"#;
+        let problem: problem::Problem = serde_json::from_str(problem_data).unwrap();
+        let solver = Solver::new(&problem).unwrap();
+        assert_eq!(solver.is_hole(&problem::Point(40, 20)), true);
+        assert_eq!(solver.is_hole(&problem::Point(20, 0)), true);
+        assert_eq!(solver.is_hole(&problem::Point(0, 20)), true);
+        assert_eq!(solver.is_hole(&problem::Point(20, 40)), true);
+        let hole_poly = problem.hole_polygon();
+        assert_eq!(hole_poly.contains(&problem::Point(40, 20)), true);
+        assert_eq!(hole_poly.contains(&problem::Point(20, 0)), true);
+        assert_eq!(hole_poly.contains(&problem::Point(0, 20)), true);
+        assert_eq!(hole_poly.contains(&problem::Point(20, 40)), true);
     }
 }
