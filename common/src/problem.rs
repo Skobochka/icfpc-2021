@@ -92,22 +92,29 @@ impl Problem {
         geo::Polygon::new(self.hole.clone().into(), vec![])
     }
 
-    pub fn score_pose(&self, pose: &Pose) -> Result<i64, PoseValidationError> {
+    pub fn score_vertices(&self, pose_vertices: &Vec<Point>) -> Result<i64, PoseValidationError> {
         // Check (a): connectivity. As our app does not change include edges in Pose,
         // we just check that the new Pose inclues the same number of vertices as the original
-        if self.figure.vertices.len() != pose.vertices.len() {
+        if self.figure.vertices.len() != pose_vertices.len() {
             return Err(PoseValidationError::VerticeCountMismatch)
         }
 
         // Check stretching
-        let vertices_buf: Vec<(&Point, &Point)> = self.figure.vertices.iter().zip(pose.vertices.iter()).collect();
+        let vertices_buf: Vec<(&Point, &Point)> = self.figure.vertices.iter().zip(pose_vertices.iter()).collect();
         let broken_edges: Vec<Edge> = self.figure.edges.iter().filter(|edge| {
             match edge {
                 Edge(from_idx, to_idx) => {
                     let d_before = distance(vertices_buf[*from_idx].0, vertices_buf[*to_idx].0);
                     let d_after = distance(vertices_buf[*from_idx].1, vertices_buf[*to_idx].1);
 
-                    ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64
+                    if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
+                        log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
+                        true
+                    }
+                    else {
+                        false
+                    }
+
                 }
             }
         }).map(|item| item.clone()).collect();
@@ -121,8 +128,8 @@ impl Problem {
             .filter_map(|edge| {
                 let Edge(from_idx, to_idx) = edge;
                 let geo_edge = geo::Line {
-                    start: geo::Coordinate::from(pose.vertices[*from_idx]),
-                    end: geo::Coordinate::from(pose.vertices[*to_idx])
+                    start: geo::Coordinate::from(pose_vertices[*from_idx]),
+                    end: geo::Coordinate::from(pose_vertices[*to_idx])
                 };
                 if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
                     None
@@ -136,10 +143,15 @@ impl Problem {
         }
 
         let dislikes = self.hole.iter().map(|hole_vert| {
-            pose.vertices.iter().map(|pose_vert| distance(hole_vert, pose_vert)).min().unwrap()
+            pose_vertices.iter().map(|pose_vert| distance(hole_vert, pose_vert)).min().unwrap()
         }).sum();
 
         Ok(dislikes)
+    }
+
+
+    pub fn score_pose(&self, pose: &Pose) -> Result<i64, PoseValidationError> {
+        self.score_vertices(&pose.vertices)
     }
 }
 

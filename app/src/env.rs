@@ -453,13 +453,13 @@ impl Env {
                     }
                 }
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, };
-                self.import_solution(self.export_solution());
+                self.rescore_solution();
             },
             DragState::WantTarget { vertex_index, allowed, } =>
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, },
             DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::FoldVertex { target, }, .. } => {
                 self.problem.figure.vertices[vertex_index] = target;
-                self.import_solution(self.export_solution());
+                self.rescore_solution();
             },
             DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::ChooseEdge { other_index, }, .. } => {
                 let mut allowed = Vec::new();
@@ -545,7 +545,7 @@ impl Env {
             DragState::WantEdgeTargetHighlight { edge, candidate: (p, q), .. } => {
                 self.problem.figure.vertices[edge.0] = p;
                 self.problem.figure.vertices[edge.1] = q;
-                self.import_solution(self.export_solution());
+                self.rescore_solution();
             },
         }
     }
@@ -564,7 +564,7 @@ impl Env {
             point.0 -= 1;
         }
 
-        self.import_solution(self.export_solution())
+        self.rescore_solution();
     }
 
     pub fn move_figure_right(&mut self) {
@@ -577,7 +577,7 @@ impl Env {
             point.0 += 1;
         }
 
-        self.import_solution(self.export_solution())
+        self.rescore_solution();
     }
 
     pub fn move_figure_upper(&mut self) {
@@ -590,7 +590,7 @@ impl Env {
             point.1 -= 1;
         }
 
-        self.import_solution(self.export_solution())
+        self.rescore_solution();
     }
 
     pub fn move_figure_lower(&mut self) {
@@ -603,7 +603,7 @@ impl Env {
             point.1 += 1;
         }
 
-        self.import_solution(self.export_solution())
+        self.rescore_solution();
     }
 
     pub fn rotate_figure_left(&mut self) -> Result<(), RotateError> {
@@ -625,7 +625,7 @@ impl Env {
         self.problem.figure.import_from_geo(rotated_points)
             .map_err(RotateError::GeoImport)?;
 
-        self.import_solution(self.export_solution());
+        self.rescore_solution();
         Ok(())
     }
 
@@ -647,13 +647,22 @@ impl Env {
 
         self.problem.figure.import_from_geo(rotated_points)
             .map_err(RotateError::GeoImport)?;
-        self.import_solution(self.export_solution());
+        self.rescore_solution();
         Ok(())
     }
 
     pub fn import_solution(&mut self, pose: problem::Pose) {
         self.problem = self.initial_problem.clone();
         let score = self.problem.import_pose(pose);
+        self.update_score_state(score);
+    }
+
+    pub fn rescore_solution(&mut self) {
+        let score = self.initial_problem.score_vertices(&self.problem.figure.vertices);
+        self.update_score_state(score);
+    }
+
+    pub fn update_score_state(&mut self, score: Result<i64, problem::PoseValidationError>) {
         match score {
             Ok(score_value) => {
                 log::debug!(" ;; pose loaded successfully, score: {:?}", score);
@@ -664,7 +673,7 @@ impl Env {
                 self.score_state = ScoringState::VerticeCountMismatch;
             },
             Err(problem::PoseValidationError::BrokenEdgesFound(edges)) => {
-                log::debug!(" ;; pose load failure, broken edges found");
+                log::debug!(" ;; pose load failure, broken edges found: {:?}", edges);
                 self.score_state = ScoringState::BrokenEdgesFound(edges);
             },
             Err(problem::PoseValidationError::EdgesNotFitHole(edges)) => {
