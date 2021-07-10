@@ -399,7 +399,7 @@ impl Env {
 
     pub fn move_figure_left(&mut self) {
         for point in &self.problem.figure.vertices {
-            if point.0 < 1 {
+            if point.0 - 1 < self.min_x as i64  {
                 return;
             }
         }
@@ -425,7 +425,7 @@ impl Env {
 
     pub fn move_figure_upper(&mut self) {
         for point in &self.problem.figure.vertices {
-            if point.1 < 1 {
+            if point.1 - 1 < self.min_x as i64 {
                 return;
             }
         }
