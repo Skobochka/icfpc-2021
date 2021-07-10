@@ -84,6 +84,7 @@ pub enum CreateError {
 #[derive(Debug)]
 pub enum SimulatedAnnealingSolverError {
     SolverCreate(solver::CreateError),
+    SolverStep(solver::simulated_annealing::StepError),
 }
 
 #[derive(Debug)]
@@ -220,32 +221,37 @@ impl Env {
     }
 
     pub fn console_text(&self) -> String {
-        format!(
-            "move: W/A/S/D, rotate: Z/X, next/prev angle: C/V, export pose: E, drag: {}, {}, sel.angle: {}, angles: {:?}",
-            match self.drag_state {
-                DragState::WantVertex |
-                DragState::WantVertexHighlight { .. } =>
-                    "choose vertex".to_string(),
-                DragState::WantTarget { .. } |
-                DragState::WantTargetHighlight { .. } =>
-                    "choose new vertex position or edge (M to reset)".to_string(),
-                DragState::WantEdgeTarget { .. } |
-                DragState::WantEdgeTargetHighlight { .. } =>
-                    "choose new edge position (M to reset)".to_string(),
-            },
-            match &self.score_state {
-                ScoringState::Unscored => "<unscored>".to_string(),
-                ScoringState::Ok(score) => format!("score: {}", score),
-                ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
-                ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
-                ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
-            },
-            match self.selected_angle {
-                None => "<n/a>".to_string(),
-                Some(a) => format!("{}", a),
-            },
-            self.allowed_angles,
-        )
+        match &self.solver_mode {
+            SolverMode::None =>
+                format!(
+                    "move: W/A/S/D, rotate: Z/X, next/prev angle: C/V, export pose: E, drag: {}, {}, sel.angle: {}, angles: {:?}",
+                    match self.drag_state {
+                        DragState::WantVertex |
+                        DragState::WantVertexHighlight { .. } =>
+                            "choose vertex".to_string(),
+                        DragState::WantTarget { .. } |
+                        DragState::WantTargetHighlight { .. } =>
+                            "choose new vertex position or edge (M to reset)".to_string(),
+                        DragState::WantEdgeTarget { .. } |
+                        DragState::WantEdgeTargetHighlight { .. } =>
+                            "choose new edge position (M to reset)".to_string(),
+                    },
+                    match &self.score_state {
+                        ScoringState::Unscored => "<unscored>".to_string(),
+                        ScoringState::Ok(score) => format!("score: {}", score),
+                        ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
+                        ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
+                        ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
+                    },
+                    match self.selected_angle {
+                        None => "<n/a>".to_string(),
+                        Some(a) => format!("{}", a),
+                    },
+                    self.allowed_angles,
+                ),
+            SolverMode::SimulatedAnnealing { solver, } =>
+                format!("exit solver: Y, step: I, temp: {}, fitness: {:?}", solver.temp(), solver.fitness()),
+        }
     }
 
     pub fn draw<DF>(&mut self, tr: &ViewportTranslator, mut draw_element: DF) -> Result<(), DrawError> where DF: FnMut(draw::DrawElement) {
@@ -480,6 +486,19 @@ impl Env {
         );
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
         Ok(())
+    }
+
+    pub fn step_solver_simulated_annealing(&mut self) -> Result<(), SimulatedAnnealingSolverError> {
+        match &mut self.solver_mode {
+            SolverMode::None =>
+                Ok(()),
+            SolverMode::SimulatedAnnealing { solver, } =>
+                solver.step().map_err(SimulatedAnnealingSolverError::SolverStep)
+        }
+    }
+
+    pub fn exit_solver(&mut self) {
+        self.solver_mode = SolverMode::None;
     }
 
     pub fn update_mouse_cursor(&mut self, position: [f64; 2]) {

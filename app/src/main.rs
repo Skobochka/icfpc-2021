@@ -209,6 +209,12 @@ fn main() -> Result<(), Error> {
                 env.enter_solver_simulated_annealing()
                     .map_err(Error::SimulatedAnnealingSolver)?;
             },
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::Y), state: ButtonState::Release, .. }), _timestamp) =>
+                env.exit_solver(),
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::I), state: ButtonState::Release, .. }), _timestamp) => {
+                env.step_solver_simulated_annealing()
+                    .map_err(Error::SimulatedAnnealingSolver)?;
+            },
 
             _ =>
                 (),
