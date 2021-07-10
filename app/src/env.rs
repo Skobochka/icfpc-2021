@@ -264,19 +264,48 @@ impl Env {
             prev_point = point;
         }
 
-        for &edge in &self.problem.figure.edges {
-            let source_point = self.problem.figure.vertices.get(edge.0)
-                .ok_or(DrawError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
-            let target_point = self.problem.figure.vertices.get(edge.1)
-                .ok_or(DrawError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
-            draw_element(draw::DrawElement::Line {
-                color: [1., 1., 0., 1.,],
-                radius: 0.5,
-                source_x: source_point.0 as f64,
-                source_y: source_point.1 as f64,
-                target_x: target_point.0 as f64,
-                target_y: target_point.1 as f64,
-            });
+        match &self.solver_mode {
+            SolverMode::None => {
+                for &edge in &self.problem.figure.edges {
+                    let source_point = self.problem.figure.vertices.get(edge.0)
+                        .ok_or(DrawError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
+                    let target_point = self.problem.figure.vertices.get(edge.1)
+                        .ok_or(DrawError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
+                    draw_element(draw::DrawElement::Line {
+                        color: [1., 1., 0., 1.,],
+                        radius: 0.5,
+                        source_x: source_point.0 as f64,
+                        source_y: source_point.1 as f64,
+                        target_x: target_point.0 as f64,
+                        target_y: target_point.1 as f64,
+                    });
+                }
+            },
+            SolverMode::SimulatedAnnealing { solver, } => {
+                let solver_vertices = solver.vertices();
+                for &edge in &self.problem.figure.edges {
+                    let source_point = solver_vertices.get(edge.0)
+                        .ok_or(DrawError::InvalidEdgeSourceIndex { edge, index: edge.0, })?;
+                    let target_point = solver_vertices.get(edge.1)
+                        .ok_or(DrawError::InvalidEdgeTargetIndex { edge, index: edge.1, })?;
+                    draw_element(draw::DrawElement::Line {
+                        color: [1., 1., 0., 1.,],
+                        radius: 0.5,
+                        source_x: source_point.0 as f64,
+                        source_y: source_point.1 as f64,
+                        target_x: target_point.0 as f64,
+                        target_y: target_point.1 as f64,
+                    });
+                    draw_element(draw::DrawElement::Ellipse {
+                        color: [1.0, 0.0, 0.0, 1.0],
+                        x: source_point.0 as f64,
+                        y: source_point.1 as f64,
+                        width: 16.0,
+                        height: 16.0,
+                    });
+                }
+
+            },
         }
 
         if let Some(bonuses) = self.problem.bonuses.as_ref() {
