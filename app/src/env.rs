@@ -250,7 +250,7 @@ impl Env {
                     self.allowed_angles,
                 ),
             SolverMode::SimulatedAnnealing { solver, } =>
-                format!("exit solver: Y, step: I, temp: {}, fitness: {:?}", solver.temp(), solver.fitness()),
+                format!("exit solver: Y, step: I, temp: {}, fitness: {:?}, energy: {}", solver.temp(), solver.fitness(), solver.fitness().energy()),
         }
     }
 
@@ -482,6 +482,8 @@ impl Env {
             solver::simulated_annealing::Params {
                 max_temp: 100.0,
                 cooling_step_temp: 1.0,
+                minimum_temp: 2.0,
+                iterations_per_cooling_step: 100,
             },
         );
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };

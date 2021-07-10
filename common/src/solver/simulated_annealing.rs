@@ -9,6 +9,7 @@ use crate::{
 pub struct Params {
     pub max_temp: f64,
     pub cooling_step_temp: f64,
+    pub minimum_temp: f64,
     pub iterations_per_cooling_step: usize,
 }
 
@@ -30,7 +31,7 @@ pub enum Fitness {
 
 #[derive(Debug)]
 pub enum StepError {
-
+    TempTooLow,
 }
 
 impl SimulatedAnnealingSolver {
@@ -69,13 +70,60 @@ impl SimulatedAnnealingSolver {
     }
 
     pub fn step(&mut self) -> Result<(), StepError> {
+        if self.temp < self.params.minimum_temp {
+            return Err(StepError::TempTooLow);
+        }
+
+        self.vertices_tmp.clear();
+        self.vertices_tmp.extend(self.vertices_cur.iter().cloned());
+
+        let mut rng = rand::thread_rng();
         for _ in 0 .. self.params.iterations_per_cooling_step {
-            generate_vertices(&self.solver, &mut self.vertices_tmp);
+            let vertex_index = rng.gen_range(0 .. self.vertices_tmp.len());
+
+            let moved_point = loop {
+                let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
+                let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
+                let point = problem::Point(x, y);
+                if self.solver.is_hole(&point) {
+                    break point;
+                }
+            };
+            self.vertices_tmp[vertex_index] = moved_point;
             let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp);
 
+            let energy_cur = self.fitness_cur.energy();
+            let energy_tmp = fitness_tmp.energy();
+            let accept_prob = if energy_tmp < energy_cur {
+                1.0
+            } else {
+                (-(energy_tmp - energy_cur) / self.temp).exp()
+            };
+            if rng.gen_range(0.0 .. 1.0) < accept_prob {
+                // accept
 
+                log::debug!(
+                    "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, energy_cur = {:?}, energy_tmp = {:?}, accept_prob = {:?}",
+                    self.vertices_cur[vertex_index],
+                    self.vertices_tmp[vertex_index],
+                    self.fitness_cur,
+                    fitness_tmp,
+                    energy_cur,
+                    energy_tmp,
+                    accept_prob,
+                );
 
+                self.vertices_cur[vertex_index] =
+                    self.vertices_tmp[vertex_index];
+                self.fitness_cur = fitness_tmp;
+            } else {
+                // reject
+                self.vertices_tmp[vertex_index] =
+                    self.vertices_cur[vertex_index];
+            }
         }
+
+        self.temp -= self.params.cooling_step_temp;
         Ok(())
     }
 }
@@ -141,22 +189,16 @@ impl Fitness {
         }
     }
 
-    fn is_better_than(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Fitness::FigureScored { score: score_a, }, Fitness::FigureScored { score: score_b, }) =>
-                score_a > score_b,
-            (Fitness::FigureScored { .. }, _) =>
-                true,
-            (_, Fitness::FigureScored { .. }) =>
-                false,
-            (Fitness::NotFitHole { bad_edges_count: bad_edges_count_a, }, Fitness::NotFitHole { bad_edges_count: bad_edges_count_b, }) =>
-                bad_edges_count_a < bad_edges_count_b,
-            (Fitness::NotFitHole { .. }, Fitness::FigureCorrupted { .. }) =>
-                true,
-            (Fitness::FigureCorrupted { .. }, Fitness::NotFitHole { .. }) =>
-                false,
-            (Fitness::FigureCorrupted { ratio_sum: ratio_sum_a, }, Fitness::FigureCorrupted { ratio_sum: ratio_sum_b, }) =>
-                ratio_sum_a < ratio_sum_b,
+    pub fn energy(&self) -> f64 {
+        match self {
+            &Fitness::FigureScored { score, } if score == 0 =>
+                0.0,
+            &Fitness::FigureScored { score, } =>
+                2.0 - (1.0 / score as f64),
+            &Fitness::NotFitHole { bad_edges_count, } =>
+                3.0 - (1.0 / bad_edges_count as f64),
+            &Fitness::FigureCorrupted { ratio_sum, } =>
+                4.0 - (1.0 / ratio_sum),
         }
     }
 }
