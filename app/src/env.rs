@@ -38,6 +38,7 @@ pub struct Env {
     mouse_cursor: Option<[f64; 2]>,
     score_state: ScoringState,
     drag_state: DragState,
+    allowed_angles: Vec<f64>,
 }
 
 #[derive(Debug)]
@@ -171,6 +172,7 @@ impl Env {
             border_width,
             original_pose: problem.export_pose(),
             initial_problem: problem.clone(),
+            allowed_angles: problem.possible_rotations(),
             problem,
             min_x: min_x - ((max_x - min_x) / 2.0),
             min_y: min_y - ((max_y - min_y) / 2.0),
@@ -203,7 +205,7 @@ impl Env {
 
     pub fn console_text(&self) -> String {
         format!(
-            "move: W/A/S/D, rotate: Z/X, export pose: E, drag: {}, {}",
+            "move: W/A/S/D, rotate: Z/X, export pose: E, drag: {}, {}, angles: {:?}",
             match self.drag_state {
                 DragState::WantVertex |
                 DragState::WantVertexHighlight { .. } =>
@@ -222,6 +224,7 @@ impl Env {
                 ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
                 ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
             },
+            self.allowed_angles,
         )
     }
 
@@ -454,12 +457,14 @@ impl Env {
                 }
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, };
                 self.rescore_solution();
+                self.update_angles();
             },
             DragState::WantTarget { vertex_index, allowed, } =>
                 self.drag_state = DragState::WantTarget { vertex_index, allowed, },
             DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::FoldVertex { target, }, .. } => {
                 self.problem.figure.vertices[vertex_index] = target;
                 self.rescore_solution();
+                self.update_angles();
             },
             DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::ChooseEdge { other_index, }, .. } => {
                 let mut allowed = Vec::new();
@@ -546,6 +551,7 @@ impl Env {
                 self.problem.figure.vertices[edge.0] = p;
                 self.problem.figure.vertices[edge.1] = q;
                 self.rescore_solution();
+                self.update_angles();
             },
         }
     }
@@ -565,6 +571,8 @@ impl Env {
         }
 
         self.rescore_solution();
+        // move does not break allowed angles
+        // self.update_angles();
     }
 
     pub fn move_figure_right(&mut self) {
@@ -578,6 +586,8 @@ impl Env {
         }
 
         self.rescore_solution();
+        // move does not break allowed angles
+        // self.update_angles();
     }
 
     pub fn move_figure_upper(&mut self) {
@@ -591,6 +601,8 @@ impl Env {
         }
 
         self.rescore_solution();
+        // move does not break allowed angles
+        // self.update_angles();
     }
 
     pub fn move_figure_lower(&mut self) {
@@ -604,6 +616,8 @@ impl Env {
         }
 
         self.rescore_solution();
+        // move does not break allowed angles
+        // self.update_angles();
     }
 
     pub fn rotate_figure_left(&mut self) -> Result<(), RotateError> {
@@ -626,6 +640,7 @@ impl Env {
             .map_err(RotateError::GeoImport)?;
 
         self.rescore_solution();
+        self.update_angles();
         Ok(())
     }
 
@@ -648,6 +663,7 @@ impl Env {
         self.problem.figure.import_from_geo(rotated_points)
             .map_err(RotateError::GeoImport)?;
         self.rescore_solution();
+        self.update_angles();
         Ok(())
     }
 
@@ -660,6 +676,13 @@ impl Env {
     pub fn rescore_solution(&mut self) {
         let score = self.initial_problem.score_vertices(&self.problem.figure.vertices);
         self.update_score_state(score);
+    }
+
+    pub fn update_angles(&mut self) {
+        let mut problem = self.initial_problem.clone();
+        problem.figure.vertices = self.problem.figure.vertices.clone();
+        self.allowed_angles = problem.possible_rotations();
+        log::debug!("possible rotations around centroid: {:?}", self.allowed_angles);
     }
 
     pub fn update_score_state(&mut self, score: Result<i64, problem::PoseValidationError>) {

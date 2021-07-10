@@ -6,6 +6,9 @@ use std::{
 
 use geo::{
     algorithm::{
+        rotate::{
+            RotatePoint,
+        },
         contains::{
             Contains,
         },
@@ -108,7 +111,7 @@ impl Problem {
                     let d_after = distance(vertices_buf[*from_idx].1, vertices_buf[*to_idx].1);
 
                     if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
-                        log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
+                        // log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
                         true
                     }
                     else {
@@ -153,6 +156,43 @@ impl Problem {
     pub fn score_pose(&self, pose: &Pose) -> Result<i64, PoseValidationError> {
         self.score_vertices(&pose.vertices)
     }
+
+    pub fn possible_rotations(&self) -> Vec<f64> {
+        let mut angles = vec![];
+        let geo_figure = self.figure.export_to_geo().unwrap();
+        for angle in 1..360 {
+            // log::debug!("checking angle {}", angle);
+            let mut new_geo_figure = geo_figure.clone();
+            new_geo_figure.rotate_around_centroid_mut(angle as f64);
+            let mut new_figure = self.figure.clone();
+            new_figure.import_from_geo(new_geo_figure.points).unwrap();
+            match self.score_vertices(&new_figure.vertices) {
+                Err(PoseValidationError::BrokenEdgesFound(_)) |
+                Err(PoseValidationError::VerticeCountMismatch) => continue,
+                _ => { angles.push(angle as f64); }
+            }
+        }
+        angles
+    }
+
+    pub fn possible_rotations_around_point(&self, point: &Point) -> Vec<f64> {
+        let mut angles = vec![];
+        let geo_point = geo::Point::from(point);
+        let geo_figure = self.figure.export_to_geo().unwrap();
+        for angle in 1..360 {
+            // log::debug!("(for point) checking angle {}", angle);
+            let mut new_geo_figure = geo_figure.clone();
+            new_geo_figure.rotate_around_point_mut(angle as f64, geo_point);
+            let mut new_figure = self.figure.clone();
+            new_figure.import_from_geo(new_geo_figure.points).unwrap();
+            match self.score_vertices(&new_figure.vertices) {
+                Err(PoseValidationError::BrokenEdgesFound(_)) |
+                Err(PoseValidationError::VerticeCountMismatch) => continue,
+                _ => { angles.push(angle as f64); }
+            }
+        }
+        angles
+    }
 }
 
 #[derive(Debug)]
@@ -166,6 +206,7 @@ pub enum GeoImportError {
     PointsInEdgeMismatch { expected: usize, provided: usize, },
 }
 
+#[derive(Clone, Debug)]
 pub struct GeoFigure {
     pub points: Vec<geo::Point<f64>>,
     pub centroid: geo::Point<f64>,
@@ -205,6 +246,33 @@ impl Figure {
 
         Ok(())
     }
+
+}
+
+impl GeoFigure {
+    pub fn rotate_around_centroid_mut(&mut self, angle: f64) {
+        let rotated_points: Vec<_> = self
+            .points
+            .iter()
+            .map(|p| p.rotate_around_point(angle, self.centroid))
+            .collect();
+        self.points = rotated_points;
+    }
+
+    pub fn rotate_around_point_mut(&mut self, angle: f64, point: geo::Point<f64>) {
+        let rotated_points: Vec<_> = self
+            .points
+            .iter()
+            .map(|p| {
+                if *p == point {
+                    p.clone()
+                } else {
+                    p.rotate_around_point(angle, point)
+                }
+            })
+            .collect();
+        self.points = rotated_points;
+    }
 }
 
 impl Pose {
@@ -228,6 +296,18 @@ impl Pose {
 impl From<Point> for geo::Point<i64> {
     fn from(point: Point) -> Self {
         geo::Point(geo::Coordinate::<i64> { x: point.0, y: point.1 })
+    }
+}
+
+impl From<Point> for geo::Point<f64> {
+    fn from(point: Point) -> Self {
+        geo::Point(geo::Coordinate::<f64> { x: point.0 as f64, y: point.1 as f64 })
+    }
+}
+
+impl From<&Point> for geo::Point<f64> {
+    fn from(point: &Point) -> Self {
+        geo::Point(geo::Coordinate::<f64> { x: point.0 as f64, y: point.1 as f64 })
     }
 }
 
