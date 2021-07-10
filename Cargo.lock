@@ -1778,6 +1778,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "solver-bruteforce"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "log",
+ "pretty_env_logger",
+ "structopt",
+]
+
+[[package]]
 name = "spin_sleep"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

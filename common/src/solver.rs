@@ -5,6 +5,7 @@ use crate::{
 };
 
 pub mod simulated_annealing;
+pub mod bruteforce;
 
 #[allow(dead_code)]
 pub struct Solver {

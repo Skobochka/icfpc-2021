@@ -1,0 +1,47 @@
+use structopt::{
+    StructOpt,
+};
+
+
+use common::{
+    cli,
+    problem,
+    solver,
+};
+
+
+#[derive(Clone, StructOpt, Debug)]
+pub struct CliArgs {
+    #[structopt(flatten)]
+    pub common: cli::CommonCliArgs,
+}
+
+
+#[derive(Debug)]
+pub enum Error {
+    ProblemLoad(problem::FromFileError),
+    SolverCreate(solver::CreateError),
+    PoseExport(problem::WriteFileError),
+}
+
+fn main() -> Result<(), Error> {
+    pretty_env_logger::init();
+    let cli_args = CliArgs::from_args();
+    log::info!("program starts as: {:?}", cli_args);
+
+    let problem = problem::Problem::from_file(&cli_args.common.problem_file)
+        .map_err(Error::ProblemLoad)?;
+    log::debug!(" ;; problem loaded: {:?}", problem);
+
+    let solver = solver::bruteforce::BruteforceSolver::new(
+        solver::Solver::new(&problem)
+            .map_err(Error::SolverCreate)?,
+        );
+
+    let pose = solver.solve().unwrap();
+    pose.write_to_file(&cli_args.common.pose_file)
+        .map_err(Error::PoseExport)?;
+    log::info!("pose {:?} has been written to {:?}", pose, cli_args.common.pose_file);
+
+    Ok(())
+}
