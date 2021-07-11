@@ -106,7 +106,7 @@ impl SimulatedAnnealingSolver {
             let mut counter = 0;
             let vertex_index = loop {
                 counter += 1;
-                if counter > 1000000 {
+                if counter > 10000000 {
                     return Err(StepError::ProbablyInfiniteLoopInVertexIndex);
                 }
 
@@ -140,7 +140,7 @@ impl SimulatedAnnealingSolver {
             let mut counter = 0;
             let moved_vertex = loop {
                 counter += 1;
-                if counter > 1000000 {
+                if counter > 10000000 {
                     return Err(StepError::ProbablyInfiniteLoopInMovedVertex);
                 }
 
