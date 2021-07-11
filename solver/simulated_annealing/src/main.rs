@@ -72,13 +72,13 @@ fn main() -> Result<(), Error> {
                 None =>
                     Vec::new(),
                 Some(problem::PoseBonus::BreakALeg { .. }) =>
-                    problem::ProblemBonusType::BreakALeg,
+                    vec![problem::ProblemBonusType::BreakALeg],
                 Some(problem::PoseBonus::Globalist { .. }) =>
-                    problem::ProblemBonusType::Globalist,
+                    vec![problem::ProblemBonusType::Globalist],
                 Some(problem::PoseBonus::Wallhack { .. }) =>
-                    problem::ProblemBonusType::Wallhack,
+                    vec![problem::ProblemBonusType::Wallhack],
                 Some(problem::PoseBonus::Superflex { .. }) =>
-                    problem::ProblemBonusType::Superflex,
+                    vec![problem::ProblemBonusType::Superflex],
             },
         ).map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
@@ -120,7 +120,7 @@ fn main() -> Result<(), Error> {
                     best_solution = Some(score);
                     let pose = problem::Pose {
                         vertices: solver.vertices().to_vec(),
-                        bonuses: if let Some(bonus) = provide_bonus {
+                        bonuses: if let Some(bonus) = unlocked_bonus {
                             Some(vec![bonus])
                         } else {
                             None
