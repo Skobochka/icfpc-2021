@@ -164,16 +164,15 @@ impl Problem {
         match bonus {
             Some(PoseBonus::Globalist { .. }) => {
                 // Check stretching
-                let mut d_before = 0_i64;
-                let mut d_after = 0_i64;
-
+                let mut ratio_sum = 0.0;
                 for &Edge(from_idx, to_idx) in &self.figure.edges {
-                    d_before += distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
-                    d_after += distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
+                    let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
+                    let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
 
+                    let ratio = ((d_after as f64) / (d_before as f64) - 1_f64).abs();
+                    ratio_sum += ratio;
                 }
 
-                let ratio_sum = ((d_after as f64) / (d_before as f64) - 1_f64).abs();
                 if ratio_sum > (self.figure.edges.len() as f64 * self.epsilon as f64) / 1000000_f64 {
                     return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges: vec![], });
                 }
