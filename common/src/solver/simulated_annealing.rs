@@ -240,7 +240,8 @@ fn generate_vertices(
 impl Fitness {
     fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::ProblemBonus]) -> Self {
 
-        let maybe_pose_bonus = match bonuses.get(0) {
+        // TODO: here we are forced to use only Globalist bonuses
+        let maybe_pose_bonus = match bonuses.iter().find(|b| if let problem::ProblemBonusType::Globalist = b.bonus { true } else { false }) {
             None =>
                 None,
             Some(problem::ProblemBonus { bonus: problem::ProblemBonusType::BreakALeg, .. }) =>
