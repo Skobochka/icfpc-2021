@@ -195,7 +195,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                     let mut auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer: {}", cli_args.api_token))
                         .map_err(Error::WebClientHeader)?;
                     auth_value.set_sensitive(true);
-                    headers.insert(reqwest::header::AUTHORIZATION, auth_value);
+                    headers.insert("Authorization", auth_value);
                     let body = serde_json::to_string(&pose)
                         .map_err(Error::PoseSerialize)?;
 
