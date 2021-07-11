@@ -23,7 +23,7 @@ use serde_derive::{
     Deserialize,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 pub struct Point(pub i64, pub i64);
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]

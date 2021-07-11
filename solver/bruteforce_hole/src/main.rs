@@ -60,7 +60,7 @@ fn main() -> Result<(), Error> {
         _ => {},
     };
 
-    let mut solver = solver::bruteforce_hole::BruteforceHoleSolver::new(
+    let solver = solver::bruteforce_hole::BruteforceHoleSolver::new(
         solver::Solver::new(&problem, Some(pose))
             .map_err(Error::SolverCreate)?,
         );
