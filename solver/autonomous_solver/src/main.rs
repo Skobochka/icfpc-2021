@@ -1,6 +1,7 @@
 use std::{
     fs,
     io,
+    time,
     thread,
     sync::{
         mpsc,
@@ -38,6 +39,9 @@ pub struct CliArgs {
     /// worker slaves count
     #[structopt(long = "worker-slaves-count", default_value = "4")]
     pub worker_slaves_count: usize,
+    /// worker solving timeout in seconds
+    #[structopt(long = "worker-solving-timeout-s", default_value = "600")]
+    pub worker_solving_timeout_s: u64,
 
     /// maximum reheats count
     #[structopt(long = "max-reheats-count", default_value = "5")]
@@ -140,6 +144,10 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     let maybe_pose_score = match problem::Pose::from_file(&problem_desc.pose_file) {
         Ok(pose) =>
             match problem.score_pose(&pose) {
+                Ok(0) => {
+                    log::info!("skipping task {} because of zero score", problem_desc.task_id);
+                    return Ok(());
+                },
                 Ok(score) =>
                     Some((pose, score)),
                 Err(error) =>
@@ -173,9 +181,16 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         },
     );
 
+    let solving_start_time = time::Instant::now();
+
     let mut reheats_count = 0;
     let mut submission = None;
     loop {
+        if solving_start_time.elapsed().as_secs() > cli_args.worker_solving_timeout_s {
+            log::info!("forcing terminate task {} because of timeout {} s", problem_desc.task_id, cli_args.worker_solving_timeout_s);
+            break;
+        }
+
         match solver.step() {
             Ok(()) =>
                 (),
@@ -190,33 +205,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             },
             Err(solver::simulated_annealing::StepError::TempTooLow) => {
                 log::debug!("annealing done for task {}", problem_desc.task_id);
-                if let Some((pose, score)) = submission {
-                    let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
-                    let mut headers = reqwest::header::HeaderMap::new();
-                    let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", cli_args.api_token))
-                        .map_err(Error::WebClientHeader)?;
-                    // auth_value.set_sensitive(true);
-                    headers.insert("Authorization", auth_value);
-                    let body = serde_json::to_string(&pose)
-                        .map_err(Error::PoseSerialize)?;
-
-                    log::info!(
-                        "preparing submission for for task {} with score {} to {:?}, headers: {:?}",
-                        problem_desc.task_id,
-                        score,
-                        url,
-                        headers,
-                    );
-
-                    let send_result = reqwest::blocking::Client::builder()
-                        .default_headers(headers)
-                        .build().map_err(Error::WebClientBuilder)?
-                        .post(&url)
-                        .body(body)
-                        .send().map_err(Error::WebClientSend)?;
-                    log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
-                }
-                return Ok(());
+                break;
             }
         }
         match solver.fitness() {
@@ -242,6 +231,34 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                 (),
         }
     }
+
+    if let Some((pose, score)) = submission {
+        let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
+        let mut headers = reqwest::header::HeaderMap::new();
+        let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", cli_args.api_token))
+            .map_err(Error::WebClientHeader)?;
+        // auth_value.set_sensitive(true);
+        headers.insert("Authorization", auth_value);
+        let body = serde_json::to_string(&pose)
+            .map_err(Error::PoseSerialize)?;
+
+        log::info!(
+            "preparing submission for for task {} with score {} to {:?}, headers: {:?}",
+            problem_desc.task_id,
+            score,
+            url,
+            headers,
+        );
+
+        let send_result = reqwest::blocking::Client::builder()
+            .default_headers(headers)
+            .build().map_err(Error::WebClientBuilder)?
+            .post(&url)
+            .body(body)
+            .send().map_err(Error::WebClientSend)?;
+        log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
+    }
+    Ok(())
 }
 
 fn sync_problems_directory(cli_args: &CliArgs) -> Result<Vec<ProblemDesc>, Error> {
