@@ -41,10 +41,15 @@ fn main() -> Result<(), Error> {
             .map_err(Error::SolverCreate)?,
         );
 
-    let pose = solver.solve().unwrap();
-    pose.write_to_file(&cli_args.common.pose_file)
-        .map_err(Error::PoseExport)?;
-    log::info!("pose {:?} has been written to {:?}", pose, cli_args.common.pose_file);
+    let pose = solver.solve();
+    match pose {
+        None => {},
+        Some(pose) => {
+            pose.write_to_file(&cli_args.common.pose_file)
+                .map_err(Error::PoseExport)?;
+            log::info!("pose {:?} has been written to {:?}", pose, cli_args.common.pose_file);
+        }
+    }
 
     Ok(())
 }

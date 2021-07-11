@@ -33,7 +33,10 @@ impl BruteforceHoleSolver {
         println!("Bruteforce of hole size {} for figure size {}. It will take ~{} iterations",
                  hole.len(), vertices.len(), self.total_steps);
         let (score, pose) = self.run(0, i64::MAX, &mut vertices, &hole);
-        println!("Found solution with score {:?}: {:?}", score, pose);
+        match pose {
+            None => println!("Found solution not found..."),
+            Some(ref pose) => println!("Found solution with score {:?}: {:?}", score, pose),
+        };
         pose
     }
 
@@ -79,12 +82,12 @@ impl BruteforceHoleSolver {
     }
 
     fn track_progress(&mut self) {
-        let perc_before = (self.step / self.total_steps * 1000) as i64;
+        let perc_before = ((self.step * 1000) / self.total_steps) as i64;
         self.step += 1;
-        let perc_after = (self.step / self.total_steps * 1000) as i64;
+        let perc_after = ((self.step * 1000) / self.total_steps) as i64;
 
         if perc_after > perc_before {
-            println!("[BruteforceHoleSolver] PROGRESS: {} ({} of {})",
+            println!("PROGRESS: {} ({} of {})",
                      perc_after as f64 / 10.0, self.step, self.total_steps);
         }
     }
