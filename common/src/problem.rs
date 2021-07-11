@@ -71,7 +71,7 @@ pub enum ProblemBonusType {
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub struct ProblemId(pub usize);
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[serde(tag = "bonus")]
 pub enum PoseBonus {
     #[serde(rename = "BREAK_A_LEG")]
@@ -145,7 +145,7 @@ impl Problem {
 
     pub fn score_vertices_check_count(&self,
                                       pose_vertices: &[Point],
-                                      _bonus: Option<ProblemBonus>) -> Result<(), PoseValidationError> {
+                                      _bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
         // Check (a): connectivity. As our app does not change include edges in Pose,
         // we just check that the new Pose inclues the same number of vertices as the original
         if self.figure.vertices.len() != pose_vertices.len() {
@@ -156,7 +156,7 @@ impl Problem {
 
     pub fn score_vertices_check_stretching(&self,
                                            pose_vertices: &[Point],
-                                           _bonus: Option<ProblemBonus>) -> Result<(), PoseValidationError> {
+                                           _bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
         // Check stretching
         let mut broken_edges = Vec::new();
         for &Edge(from_idx, to_idx) in &self.figure.edges {
@@ -176,7 +176,7 @@ impl Problem {
 
     pub fn score_vertices_check_hole(&self,
                                      pose_vertices: &[Point],
-                                     _bonus: Option<ProblemBonus>) -> Result<(), PoseValidationError> {
+                                     _bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
         let geo_hole = self.hole_polygon_f64();
         let mut edges_out_of_hole = Vec::new();
         for &Edge(from_idx, to_idx) in &self.figure.edges {
@@ -201,7 +201,7 @@ impl Problem {
 
     pub fn score_vertices(&self,
                           pose_vertices: &[Point],
-                          bonus: Option<ProblemBonus>) -> Result<i64, PoseValidationError> {
+                          bonus: Option<PoseBonus>) -> Result<i64, PoseValidationError> {
         self.score_vertices_check_count(pose_vertices, bonus)?;
         self.score_vertices_check_stretching(pose_vertices, bonus)?;
         self.score_vertices_check_hole(pose_vertices, bonus)?;
