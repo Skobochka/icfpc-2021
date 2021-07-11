@@ -923,9 +923,9 @@ impl Env {
                 log::debug!(" ;; pose load failure, vertice mismatch");
                 self.score_state = ScoringState::VerticeCountMismatch;
             },
-            Err(problem::PoseValidationError::BrokenEdgesFound(edges)) => {
-                log::debug!(" ;; pose load failure, broken edges found: {:?}", edges);
-                self.score_state = ScoringState::BrokenEdgesFound(edges);
+            Err(problem::PoseValidationError::BrokenEdgesFound { broken_edges, .. }) => {
+                log::debug!(" ;; pose load failure, broken edges found: {:?}", broken_edges);
+                self.score_state = ScoringState::BrokenEdgesFound(broken_edges);
             },
             Err(problem::PoseValidationError::EdgesNotFitHole(edges)) => {
                 log::debug!(" ;; pose load failure, edges not fitting hole found");
