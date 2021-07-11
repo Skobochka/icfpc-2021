@@ -41,6 +41,7 @@ pub struct Env {
     allowed_angles: Vec<f64>,
     selected_angle: Option<f64>,
     solver_mode: SolverMode,
+    bonus_highlight: Option<problem::ProblemId>,
 }
 
 enum SolverMode {
@@ -198,6 +199,7 @@ impl Env {
             score_state: ScoringState::Unscored,
             drag_state: DragState::WantVertex,
             solver_mode: SolverMode::None,
+            bonus_highlight: None,
         })
     }
 
@@ -346,6 +348,23 @@ impl Env {
                     x: bonus.position.0 as f64,
                     y: bonus.position.1 as f64,
                 });
+                if let Some(mouse_cursor) = self.mouse_cursor {
+                    let vertex_x = tr.x(bonus.position.0 as f64);
+                    let vertex_y = tr.y(bonus.position.1 as f64);
+                    let sq_dist =
+                        (mouse_cursor[0] - vertex_x) * (mouse_cursor[0] - vertex_x) +
+                        (mouse_cursor[1] - vertex_y) * (mouse_cursor[1] - vertex_y);
+                    if sq_dist < 32.0 {
+                        draw_element(draw::DrawElement::Ellipse {
+                            color: [0.0, 1.0, 0.0, 0.5],
+                            x: bonus.position.0 as f64,
+                            y: bonus.position.1 as f64,
+                            width: 24.0,
+                            height: 24.0,
+                        });
+                        self.bonus_highlight = Some(bonus.problem);
+                    }
+                }
             }
         }
 
@@ -496,6 +515,7 @@ impl Env {
                 minimum_temp: 2.0,
                 valid_edge_accept_prob: 0.5,
                 iterations_per_cooling_step: 10000,
+                operating_mode: solver::simulated_annealing::OperatingMode::ScoreMaximizer,
             },
         );
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
@@ -531,154 +551,176 @@ impl Env {
     }
 
     pub fn mouse_click(&mut self) {
-        match mem::replace(&mut self.drag_state, DragState::WantVertex) {
-            DragState::WantVertex =>
-                (),
-            DragState::WantVertexHighlight { vertex_index, } => {
-                let mut allowed = Vec::new();
-                let connected_edges: Vec<_> = self.problem
-                    .figure
-                    .edges
-                    .iter()
-                    .filter(|e| e.0 == vertex_index || e.1 == vertex_index)
-                    .collect();
-                for edge in &connected_edges {
-                    if edge.0 != vertex_index {
-                        allowed.push(AllowedMove::ChooseEdge { other_index: edge.0, });
-                    }
-                    if edge.1 != vertex_index {
-                        allowed.push(AllowedMove::ChooseEdge { other_index: edge.1, });
-                    }
-                }
-
-                for try_x in self.min_x as i64 ..= self.max_x as i64 {
-                    for try_y in self.min_y as i64 .. self.max_y as i64 {
-                        if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
-                            continue;
-                        }
-                        let try_vertex = problem::Point(try_x, try_y);
-                        let mut is_ok = true;
+        match self.solver_mode {
+            SolverMode::None =>
+                match mem::replace(&mut self.drag_state, DragState::WantVertex) {
+                    DragState::WantVertex =>
+                        (),
+                    DragState::WantVertexHighlight { vertex_index, } => {
+                        let mut allowed = Vec::new();
+                        let connected_edges: Vec<_> = self.problem
+                            .figure
+                            .edges
+                            .iter()
+                            .filter(|e| e.0 == vertex_index || e.1 == vertex_index)
+                            .collect();
                         for edge in &connected_edges {
-                            let sample_vertex_a = self.original_pose.vertices[edge.0];
-                            let sample_vertex_b = self.original_pose.vertices[edge.1];
-
-                            let other_vertex_index = if edge.0 == vertex_index { edge.1 } else { edge.0 };
-                            let other_vertex = self.problem.figure.vertices[other_vertex_index];
-
-                            let orig_sq_dist = (sample_vertex_a.0 - sample_vertex_b.0) * (sample_vertex_a.0 - sample_vertex_b.0)
-                                + (sample_vertex_a.1 - sample_vertex_b.1) * (sample_vertex_a.1 - sample_vertex_b.1);
-                            let try_sq_dist = (try_vertex.0 - other_vertex.0) * (try_vertex.0 - other_vertex.0)
-                                + (try_vertex.1 - other_vertex.1) * (try_vertex.1 - other_vertex.1);
-
-                            let ratio = ((try_sq_dist as f64 / orig_sq_dist as f64) - 1.0).abs();
-                            if ratio > self.problem.epsilon as f64 / 1000000.0 {
-                                is_ok = false;
-                                break;
+                            if edge.0 != vertex_index {
+                                allowed.push(AllowedMove::ChooseEdge { other_index: edge.0, });
+                            }
+                            if edge.1 != vertex_index {
+                                allowed.push(AllowedMove::ChooseEdge { other_index: edge.1, });
                             }
                         }
-                        if is_ok {
-                            allowed.push(AllowedMove::FoldVertex { target: try_vertex, });
-                        }
-                    }
-                }
-                self.drag_state = DragState::WantTarget { vertex_index, allowed, };
-                self.rescore_solution();
-                self.update_angles();
-            },
-            DragState::WantTarget { vertex_index, allowed, } =>
-                self.drag_state = DragState::WantTarget { vertex_index, allowed, },
-            DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::FoldVertex { target, }, .. } => {
-                self.problem.figure.vertices[vertex_index] = target;
-                self.rescore_solution();
-                self.update_angles();
-            },
-            DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::ChooseEdge { other_index, }, .. } => {
-                let mut allowed = Vec::new();
-                let connected_edges: Vec<_> = self.problem
-                    .figure
-                    .edges
-                    .iter()
-                    .filter(|e| e.0 == vertex_index || e.1 == vertex_index || e.0 == other_index || e.1 == other_index)
-                    .collect();
-                let vp = self.problem.figure.vertices[vertex_index];
-                let vq = self.problem.figure.vertices[other_index];
 
-                for try_x in self.min_x as i64 ..= self.max_x as i64 {
-                    for try_y in self.min_y as i64 .. self.max_y as i64 {
-                        if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
-                            continue;
-                        }
-                        let oth_x = try_x + (vq.0 - vp.0);
-                        let oth_y = try_y + (vq.1 - vp.1);
-                        if (oth_x as f64) < self.min_x || (oth_x as f64) > self.max_x || (oth_y as f64) < self.min_y || (oth_y as f64) > self.max_y {
-                            continue;
-                        }
-                        let try_vertex = problem::Point(try_x, try_y);
-                        let oth_vertex = problem::Point(oth_x, oth_y);
+                        for try_x in self.min_x as i64 ..= self.max_x as i64 {
+                            for try_y in self.min_y as i64 .. self.max_y as i64 {
+                                if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
+                                    continue;
+                                }
+                                let try_vertex = problem::Point(try_x, try_y);
+                                let mut is_ok = true;
+                                for edge in &connected_edges {
+                                    let sample_vertex_a = self.original_pose.vertices[edge.0];
+                                    let sample_vertex_b = self.original_pose.vertices[edge.1];
 
-                        let mut is_ok = true;
-                        for edge in &connected_edges {
-                            let sample_vertex_a = self.original_pose.vertices[edge.0];
-                            let sample_vertex_b = self.original_pose.vertices[edge.1];
+                                    let other_vertex_index = if edge.0 == vertex_index { edge.1 } else { edge.0 };
+                                    let other_vertex = self.problem.figure.vertices[other_vertex_index];
 
-                            let px = if edge.0 == vertex_index {
-                                try_x
-                            } else if edge.0 == other_index {
-                                oth_x
-                            } else {
-                                self.problem.figure.vertices[edge.0].0
-                            };
-                            let py = if edge.0 == vertex_index {
-                                try_y
-                            } else if edge.0 == other_index {
-                                oth_y
-                            } else {
-                                self.problem.figure.vertices[edge.0].1
-                            };
-                            let qx = if edge.1 == vertex_index {
-                                try_x
-                            } else if edge.1 == other_index {
-                                oth_x
-                            } else {
-                                self.problem.figure.vertices[edge.1].0
-                            };
-                            let qy = if edge.1 == vertex_index {
-                                try_y
-                            } else if edge.1 == other_index {
-                                oth_y
-                            } else {
-                                self.problem.figure.vertices[edge.1].1
-                            };
+                                    let orig_sq_dist = (sample_vertex_a.0 - sample_vertex_b.0) * (sample_vertex_a.0 - sample_vertex_b.0)
+                                        + (sample_vertex_a.1 - sample_vertex_b.1) * (sample_vertex_a.1 - sample_vertex_b.1);
+                                    let try_sq_dist = (try_vertex.0 - other_vertex.0) * (try_vertex.0 - other_vertex.0)
+                                        + (try_vertex.1 - other_vertex.1) * (try_vertex.1 - other_vertex.1);
 
-                            let orig_sq_dist = (sample_vertex_a.0 - sample_vertex_b.0) * (sample_vertex_a.0 - sample_vertex_b.0)
-                                + (sample_vertex_a.1 - sample_vertex_b.1) * (sample_vertex_a.1 - sample_vertex_b.1);
-                            let try_sq_dist = (px - qx) * (px - qx) + (py - qy) * (py - qy);
-
-                            let ratio = ((try_sq_dist as f64 / orig_sq_dist as f64) - 1.0).abs();
-                            if ratio > self.problem.epsilon as f64 / 1000000.0 {
-                                is_ok = false;
-                                break;
+                                    let ratio = ((try_sq_dist as f64 / orig_sq_dist as f64) - 1.0).abs();
+                                    if ratio > self.problem.epsilon as f64 / 1000000.0 {
+                                        is_ok = false;
+                                        break;
+                                    }
+                                }
+                                if is_ok {
+                                    allowed.push(AllowedMove::FoldVertex { target: try_vertex, });
+                                }
                             }
                         }
-                        if is_ok {
-                            allowed.push((try_vertex, oth_vertex));
-                        }
-                    }
-                }
+                        self.drag_state = DragState::WantTarget { vertex_index, allowed, };
+                        self.rescore_solution();
+                        self.update_angles();
+                    },
+                    DragState::WantTarget { vertex_index, allowed, } =>
+                        self.drag_state = DragState::WantTarget { vertex_index, allowed, },
+                    DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::FoldVertex { target, }, .. } => {
+                        self.problem.figure.vertices[vertex_index] = target;
+                        self.rescore_solution();
+                        self.update_angles();
+                    },
+                    DragState::WantTargetHighlight { vertex_index, candidate: AllowedMove::ChooseEdge { other_index, }, .. } => {
+                        let mut allowed = Vec::new();
+                        let connected_edges: Vec<_> = self.problem
+                            .figure
+                            .edges
+                            .iter()
+                            .filter(|e| e.0 == vertex_index || e.1 == vertex_index || e.0 == other_index || e.1 == other_index)
+                            .collect();
+                        let vp = self.problem.figure.vertices[vertex_index];
+                        let vq = self.problem.figure.vertices[other_index];
 
-                self.drag_state = DragState::WantEdgeTarget {
-                    edge: problem::Edge(vertex_index, other_index),
-                    allowed,
-                };
-            },
-            DragState::WantEdgeTarget { edge, allowed, } =>
-                self.drag_state = DragState::WantEdgeTarget { edge, allowed, },
-            DragState::WantEdgeTargetHighlight { edge, candidate: (p, q), .. } => {
-                self.problem.figure.vertices[edge.0] = p;
-                self.problem.figure.vertices[edge.1] = q;
-                self.rescore_solution();
-                self.update_angles();
-            },
+                        for try_x in self.min_x as i64 ..= self.max_x as i64 {
+                            for try_y in self.min_y as i64 .. self.max_y as i64 {
+                                if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
+                                    continue;
+                                }
+                                let oth_x = try_x + (vq.0 - vp.0);
+                                let oth_y = try_y + (vq.1 - vp.1);
+                                if (oth_x as f64) < self.min_x || (oth_x as f64) > self.max_x || (oth_y as f64) < self.min_y || (oth_y as f64) > self.max_y {
+                                    continue;
+                                }
+                                let try_vertex = problem::Point(try_x, try_y);
+                                let oth_vertex = problem::Point(oth_x, oth_y);
+
+                                let mut is_ok = true;
+                                for edge in &connected_edges {
+                                    let sample_vertex_a = self.original_pose.vertices[edge.0];
+                                    let sample_vertex_b = self.original_pose.vertices[edge.1];
+
+                                    let px = if edge.0 == vertex_index {
+                                        try_x
+                                    } else if edge.0 == other_index {
+                                        oth_x
+                                    } else {
+                                        self.problem.figure.vertices[edge.0].0
+                                    };
+                                    let py = if edge.0 == vertex_index {
+                                        try_y
+                                    } else if edge.0 == other_index {
+                                        oth_y
+                                    } else {
+                                        self.problem.figure.vertices[edge.0].1
+                                    };
+                                    let qx = if edge.1 == vertex_index {
+                                        try_x
+                                    } else if edge.1 == other_index {
+                                        oth_x
+                                    } else {
+                                        self.problem.figure.vertices[edge.1].0
+                                    };
+                                    let qy = if edge.1 == vertex_index {
+                                        try_y
+                                    } else if edge.1 == other_index {
+                                        oth_y
+                                    } else {
+                                        self.problem.figure.vertices[edge.1].1
+                                    };
+
+                                    let orig_sq_dist = (sample_vertex_a.0 - sample_vertex_b.0) * (sample_vertex_a.0 - sample_vertex_b.0)
+                                        + (sample_vertex_a.1 - sample_vertex_b.1) * (sample_vertex_a.1 - sample_vertex_b.1);
+                                    let try_sq_dist = (px - qx) * (px - qx) + (py - qy) * (py - qy);
+
+                                    let ratio = ((try_sq_dist as f64 / orig_sq_dist as f64) - 1.0).abs();
+                                    if ratio > self.problem.epsilon as f64 / 1000000.0 {
+                                        is_ok = false;
+                                        break;
+                                    }
+                                }
+                                if is_ok {
+                                    allowed.push((try_vertex, oth_vertex));
+                                }
+                            }
+                        }
+
+                        self.drag_state = DragState::WantEdgeTarget {
+                            edge: problem::Edge(vertex_index, other_index),
+                            allowed,
+                        };
+                    },
+                    DragState::WantEdgeTarget { edge, allowed, } =>
+                        self.drag_state = DragState::WantEdgeTarget { edge, allowed, },
+                    DragState::WantEdgeTargetHighlight { edge, candidate: (p, q), .. } => {
+                        self.problem.figure.vertices[edge.0] = p;
+                        self.problem.figure.vertices[edge.1] = q;
+                        self.rescore_solution();
+                        self.update_angles();
+                    },
+                },
+            SolverMode::SimulatedAnnealing { .. } =>
+                if let Some(problem_id) = self.bonus_highlight {
+                    if let Ok(solver) = solver::Solver::new(&self.problem, Some(self.problem.export_pose())) {
+                        let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
+                            solver,
+                            solver::simulated_annealing::Params {
+                                max_temp: 100.0,
+                                cooling_step_temp: 1.0,
+                                minimum_temp: 2.0,
+                                valid_edge_accept_prob: 0.5,
+                                iterations_per_cooling_step: 10000,
+                                operating_mode: solver::simulated_annealing::OperatingMode::BonusCollector {
+                                    target_problem: problem_id,
+                                },
+                            },
+                        );
+                        self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
+                    }
+                },
         }
     }
 
