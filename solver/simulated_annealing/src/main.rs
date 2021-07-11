@@ -109,7 +109,11 @@ fn main() -> Result<(), Error> {
                     best_solution = Some(score);
                     let pose = problem::Pose {
                         vertices: solver.vertices().to_vec(),
-                        bonuses: None,
+                        bonuses: if let Some(bonus) = provide_bonus {
+                            Some(vec![bonus])
+                        } else {
+                            None
+                        },
                     };
                     pose.write_to_file(&cli_args.common.pose_file)
                         .map_err(Error::PoseExport)?;
