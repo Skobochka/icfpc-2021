@@ -12,6 +12,13 @@ pub struct Params {
     pub minimum_temp: f64,
     pub valid_edge_accept_prob: f64,
     pub iterations_per_cooling_step: usize,
+    pub operating_mode: OperatingMode,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum OperatingMode {
+    ScoreMaximizer,
+    BonusCollector,
 }
 
 pub struct SimulatedAnnealingSolver {
@@ -39,7 +46,7 @@ pub enum StepError {
 impl SimulatedAnnealingSolver {
     pub fn new(solver: solver::Solver, params: Params) -> SimulatedAnnealingSolver {
         let mut vertices_cur = Vec::new();
-        generate_vertices(&solver, &mut vertices_cur);
+        generate_vertices(&solver, &mut vertices_cur, params.operating_mode);
 
         let temp = params.max_temp;
         let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur);
@@ -56,7 +63,7 @@ impl SimulatedAnnealingSolver {
     }
 
     pub fn reset(&mut self) {
-        generate_vertices(&self.solver, &mut self.vertices_cur);
+        generate_vertices(&self.solver, &mut self.vertices_cur, self.params.operating_mode);
         self.temp = self.params.max_temp;
         self.steps = 0;
         self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur);
@@ -163,7 +170,12 @@ impl SimulatedAnnealingSolver {
     }
 }
 
-fn generate_vertices(solver: &solver::Solver, vertices: &mut Vec<problem::Point>) {
+fn generate_vertices(
+    solver: &solver::Solver,
+    vertices: &mut Vec<problem::Point>,
+    operating_mode: OperatingMode,
+)
+{
     let figure_vertices_iter = solver
         .problem
         .figure
@@ -184,6 +196,21 @@ fn generate_vertices(solver: &solver::Solver, vertices: &mut Vec<problem::Point>
                 }
             })
     );
+    match operating_mode {
+        OperatingMode::ScoreMaximizer =>
+            (),
+        OperatingMode::BonusCollector =>
+            match &solver.problem.bonuses {
+                Some(bonuses) if !bonuses.is_empty() => {
+                    for bonus in bonuses {
+
+                        todo!()
+                    }
+                },
+                Some(..) | None =>
+                    (),
+            },
+    }
 }
 
 impl Fitness {
