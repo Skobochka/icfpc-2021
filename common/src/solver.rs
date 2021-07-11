@@ -19,7 +19,7 @@ pub struct Solver {
     problem: problem::Problem,
     pose: problem::Pose,
     pose_score: i64,
-    unlocked_bonuses: Vec<problem::ProblemBonus>,
+    unlocked_bonuses: Vec<problem::ProblemBonusType>,
 }
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl Solver {
     pub fn with_bonuses(
         problem: &problem::Problem,
         pose: Option<problem::Pose>,
-        unlocked_bonuses: Vec<problem::ProblemBonus>,
+        unlocked_bonuses: Vec<problem::ProblemBonusType>,
     )
         -> Result<Solver, CreateError>
     {

@@ -17,8 +17,8 @@ pub struct CliArgs {
     #[structopt(long = "collect-bonus-problem")]
     pub collect_bonus_problem: Option<usize>,
     /// use given bonus during solving (json format)
-    #[structopt(long = "provide-bonus")]
-    pub provide_bonus: Option<String>,
+    #[structopt(long = "unlocked-bonus")]
+    pub unlocked_bonus: Option<String>,
 
     /// maximum reheats count
     #[structopt(long = "max-reheats-count", default_value = "5")]
@@ -58,7 +58,7 @@ fn main() -> Result<(), Error> {
     let pose = problem::Pose::from_file(&cli_args.common.pose_file).ok();
     log::debug!(" ;; pose loaded: {:?}", pose);
 
-    let provide_bonus: Option<problem::PoseBonus> = if let Some(bonus) = cli_args.provide_bonus {
+    let unlocked_bonus: Option<problem::PoseBonus> = if let Some(bonus) = cli_args.unlocked_bonus {
         Some(serde_json::from_str(&bonus).map_err(Error::IncorrectBonus)?)
     } else {
         None
@@ -68,7 +68,18 @@ fn main() -> Result<(), Error> {
         solver::Solver::with_bonuses(
             &problem,
             pose,
-            if let Some(bonus) = provide_bonus { vec![bonus] } else { Vec::new() },
+            match unlocked_bonus {
+                None =>
+                    Vec::new(),
+                Some(problem::PoseBonus::BreakALeg { .. }) =>
+                    problem::ProblemBonusType::BreakALeg,
+                Some(problem::PoseBonus::Globalist { .. }) =>
+                    problem::ProblemBonusType::Globalist,
+                Some(problem::PoseBonus::Wallhack { .. }) =>
+                    problem::ProblemBonusType::Wallhack,
+                Some(problem::PoseBonus::Superflex { .. }) =>
+                    problem::ProblemBonusType::Superflex,
+            },
         ).map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,

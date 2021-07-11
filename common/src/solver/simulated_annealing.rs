@@ -238,20 +238,20 @@ fn generate_vertices(
 }
 
 impl Fitness {
-    fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::ProblemBonus]) -> Self {
+    fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::ProblemBonusType]) -> Self {
 
         // TODO: here we are forced to use only Globalist bonuses
-        let maybe_pose_bonus = match bonuses.iter().find(|b| if let problem::ProblemBonusType::Globalist = b.bonus { true } else { false }) {
+        let maybe_pose_bonus = match bonuses.iter().find(|bonus| if let problem::ProblemBonusType::Globalist = bonus { true } else { false }) {
             None =>
                 None,
-            Some(problem::ProblemBonus { bonus: problem::ProblemBonusType::BreakALeg, .. }) =>
+            Some(problem::ProblemBonusType::BreakALeg) =>
                 todo!(),
-            Some(&problem::ProblemBonus { bonus: problem::ProblemBonusType::Globalist, problem, .. }) =>
-                Some(problem::PoseBonus::Globalist { problem, }),
-            Some(&problem::ProblemBonus { bonus: problem::ProblemBonusType::Wallhack, problem, .. }) =>
-                Some(problem::PoseBonus::Wallhack { problem, }),
-            Some(&problem::ProblemBonus { bonus: problem::ProblemBonusType::Superflex, problem, .. }) =>
-                Some(problem::PoseBonus::Superflex { problem, }),
+            Some(problem::ProblemBonusType::Globalist) =>
+                Some(problem::PoseBonus::Globalist { problem: problem::ProblemId(0), }),
+            Some(problem::ProblemBonusType::Wallhack) =>
+                Some(problem::PoseBonus::Wallhack { problem: problem::ProblemId(0), }),
+            Some(problem::ProblemBonusType::Superflex) =>
+                Some(problem::PoseBonus::Superflex { problem: problem::ProblemId(0), }),
         };
 
         let mut is_ok = true;
