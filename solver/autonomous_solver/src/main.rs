@@ -173,6 +173,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     );
 
     let mut reheats_count = 0;
+    let mut submission = None;
     loop {
         match solver.step() {
             Ok(()) =>
@@ -188,6 +189,27 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             },
             Err(solver::simulated_annealing::StepError::TempTooLow) => {
                 log::debug!("annealing done for task {}", problem_desc.task_id);
+                if let Some((pose, score)) = submission {
+                    log::info!("preparing submission for for task {} with score {}", problem_desc.task_id, score);
+
+                    let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
+                    let mut headers = reqwest::header::HeaderMap::new();
+                    headers.insert(
+                        reqwest::header::AUTHORIZATION,
+                        reqwest::header::HeaderValue::from_str(&format!("Bearer: {}", cli_args.api_token))
+                            .map_err(Error::WebClientHeader)?,
+                    );
+                    let body = serde_json::to_string(&pose)
+                        .map_err(Error::PoseSerialize)?;
+
+                    let send_result = reqwest::blocking::Client::builder()
+                        .default_headers(headers)
+                        .build().map_err(Error::WebClientBuilder)?
+                        .post(&url)
+                        .body(body)
+                        .send().map_err(Error::WebClientSend)?;
+                    log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
+                }
                 return Ok(());
             }
         }
@@ -207,24 +229,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                         problem_desc.task_id,
                         problem_desc.pose_file,
                     );
-
-                    let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
-                    let mut headers = reqwest::header::HeaderMap::new();
-                    headers.insert(
-                        reqwest::header::AUTHORIZATION,
-                        reqwest::header::HeaderValue::from_str(&cli_args.api_token)
-                            .map_err(Error::WebClientHeader)?,
-                    );
-                    let body = serde_json::to_string(&pose)
-                        .map_err(Error::PoseSerialize)?;
-
-                    let send_result = reqwest::blocking::Client::builder()
-                        .default_headers(headers)
-                        .build().map_err(Error::WebClientBuilder)?
-                        .post(&url)
-                        .body(body)
-                        .send().map_err(Error::WebClientSend)?;
-                    log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
+                    submission = Some((pose, score));
                 },
             solver::simulated_annealing::Fitness::FigureCorrupted { .. } |
             solver::simulated_annealing::Fitness::NotFitHole { .. } =>
