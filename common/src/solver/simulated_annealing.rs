@@ -45,6 +45,8 @@ pub enum Fitness {
 #[derive(Debug)]
 pub enum StepError {
     TempTooLow,
+    ProbablyInfiniteLoopInVertexIndex,
+    ProbablyInfiniteLoopInMovedVertex,
 }
 
 impl SimulatedAnnealingSolver {
@@ -101,7 +103,13 @@ impl SimulatedAnnealingSolver {
 
         let mut rng = rand::thread_rng();
         for _ in 0 .. self.params.iterations_per_cooling_step {
+            let mut counter = 0;
             let vertex_index = loop {
+                counter += 1;
+                if counter > 1000000 {
+                    return Err(StepError::ProbablyInfiniteLoopInVertexIndex);
+                }
+
                 let edge_index = rng.gen_range(0 .. self.solver.problem.figure.edges.len());
                 let edge = &self.solver.problem.figure.edges[edge_index];
                 if self.solver.use_bonus.is_none() {
@@ -129,7 +137,13 @@ impl SimulatedAnnealingSolver {
             // let vertex_index = rng.gen_range(0 .. self.vertices_tmp.len());
             let vertex = self.vertices_tmp[vertex_index];
 
+            let mut counter = 0;
             let moved_vertex = loop {
+                counter += 1;
+                if counter > 1000000 {
+                    return Err(StepError::ProbablyInfiniteLoopInMovedVertex);
+                }
+
                 let x = vertex.0 + rng.gen_range(-1 ..= 1);
                 let y = vertex.1 + rng.gen_range(-1 ..= 1);
 

@@ -135,8 +135,10 @@ fn slave_run(slaves_tx: mpsc::Sender<Result<String, Error>>, problem: ProblemDes
         match slave_run_task(&problem, &cli_args) {
             Ok(()) =>
                 Ok(problem.task_id),
-            Err(error) =>
-                Err(error),
+            Err(error) => {
+                log::error!("task {} raised error: {:?}", problem.task_id, error);
+                Err(error)
+            },
         }
     ).ok();
 }
