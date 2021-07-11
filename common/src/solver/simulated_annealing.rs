@@ -21,6 +21,7 @@ pub enum OperatingMode {
     BonusCollector {
         target_problem: problem::ProblemId,
     },
+    BonusHunter,
 }
 
 pub struct SimulatedAnnealingSolver {
@@ -221,6 +222,23 @@ fn generate_vertices(
                         if bonus.problem != target_problem {
                             continue;
                         }
+                        let frozen_vertex_index = loop {
+                            let index = rng.gen_range(0 .. vertices.len());
+                            if !frozen_vertices_indices.contains(&index) {
+                                break index;
+                            }
+                        };
+                        frozen_vertices_indices.push(frozen_vertex_index);
+                        vertices[frozen_vertex_index] = bonus.position;
+                    }
+                },
+                Some(..) | None =>
+                    (),
+            },
+        OperatingMode::BonusHunter =>
+            match &solver.problem.bonuses {
+                Some(bonuses) if !bonuses.is_empty() => {
+                    for bonus in bonuses {
                         let frozen_vertex_index = loop {
                             let index = rng.gen_range(0 .. vertices.len());
                             if !frozen_vertices_indices.contains(&index) {

@@ -146,15 +146,14 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     let problem = problem::Problem::from_file(&problem_desc.problem_file)
         .map_err(Error::ProblemLoad)?;
 
-    let mut has_unlocked_bonuses = false;
+    let mut unlocked_bonuses_here = Vec::new();
     let maybe_pose_score = match problem::Pose::from_file(&problem_desc.pose_file) {
         Ok(pose) => {
             if let Some(ref bonuses) = problem.bonuses {
                 for bonus in bonuses {
                     if pose.vertices.iter().find(|v| v == &&bonus.position).is_some() {
-                        has_unlocked_bonuses = true;
-                        log::debug!("task {} has unlocked bonuses", problem_desc.task_id);
-                        break;
+                        unlocked_bonuses_here.push(bonus.problem);
+                        log::debug!("task {} has unlocked bonus: {:?}", problem_desc.task_id, bonus);
                     }
                 }
             }
@@ -195,6 +194,48 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         })
         .collect();
 
+    // try unlock all bonuses, maybe we are lucky
+    let mut temporary_best_solution = None;
+    if allowed_unlocked_bonuses.is_empty() {
+        slave_run_task_with(
+            problem_desc,
+            &problem,
+            &maybe_pose,
+            &mut temporary_best_solution,
+            cli_args,
+            None,
+            solver::simulated_annealing::OperatingMode::BonusHunter,
+        )?;
+    } else {
+        for &&unlocked_bonus in &allowed_unlocked_bonuses {
+            slave_run_task_with(
+                problem_desc,
+                &problem,
+                &maybe_pose,
+                &mut temporary_best_solution,
+                cli_args,
+                Some(unlocked_bonus),
+                solver::simulated_annealing::OperatingMode::BonusHunter,
+            )?;
+        }
+    };
+    if temporary_best_solution.is_some() {
+        // we are lucky
+        return Ok(());
+    }
+    // not this time, proceed with regular stuff
+
+    let operating_mode = if unlocked_bonuses_here.is_empty() {
+        solver::simulated_annealing::OperatingMode::ScoreMaximizer
+    } else if unlocked_bonuses_here.len() == 1 {
+        solver::simulated_annealing::OperatingMode::BonusCollector {
+            target_problem: unlocked_bonuses_here[0],
+        }
+    } else {
+        log::info!("skipping task {} because of many bonuses already unlocked", problem_desc.task_id);
+        return Ok(());
+    };
+
     if allowed_unlocked_bonuses.is_empty() {
         slave_run_task_with(
             problem_desc,
@@ -203,10 +244,10 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             &mut best_solution,
             cli_args,
             None,
-            solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+            operating_mode,
         )?;
     } else {
-        for &unlocked_bonus in allowed_unlocked_bonuses {
+        for &&unlocked_bonus in &allowed_unlocked_bonuses {
             slave_run_task_with(
                 problem_desc,
                 &problem,
@@ -214,7 +255,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                 &mut best_solution,
                 cli_args,
                 Some(unlocked_bonus),
-                solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+                operating_mode,
             )?;
         }
     };
