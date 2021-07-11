@@ -160,21 +160,20 @@ impl Problem {
 
         // Check hole
         let geo_hole = self.hole_polygon_f64();
-        let edges_out_of_hole: Vec<Edge> = self.figure.edges.iter()
-            .filter_map(|edge| {
-                let Edge(from_idx, to_idx) = edge;
-                let geo_edge = geo::Line {
-                    start: geo::Coordinate::from(pose_vertices[*from_idx]),
-                    end: geo::Coordinate::from(pose_vertices[*to_idx])
-                };
-                if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
-                    None
-                }
-                else {
-                    Some(edge)
-                }
-            }).map(|item| item.clone()).collect();
-        if edges_out_of_hole.len() > 0 {
+        let mut edges_out_of_hole = Vec::new();
+        for &Edge(from_idx, to_idx) in &self.figure.edges {
+            let geo_edge = geo::Line {
+                start: geo::Coordinate::from(pose_vertices[from_idx]),
+                end: geo::Coordinate::from(pose_vertices[to_idx])
+            };
+            if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
+                // ok
+            }
+            else {
+                edges_out_of_hole.push(Edge(from_idx, to_idx));
+            }
+        }
+        if !edges_out_of_hole.is_empty() {
             return Err(PoseValidationError::EdgesNotFitHole(edges_out_of_hole));
         }
 
