@@ -115,8 +115,6 @@ fn main() -> Result<(), Error> {
         }
 
         log::info!("directory processing finished, {} tasks done", tasks_done);
-
-        return Ok(())
     }
 }
 
