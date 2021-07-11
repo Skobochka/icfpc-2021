@@ -6,4 +6,5 @@ members = [
     "solver/bruteforce_hole",
     "solver/simulated_annealing",
     "solver/autonomous_solver",
+    "tools/bonus_table",
 ]
