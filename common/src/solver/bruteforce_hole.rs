@@ -30,7 +30,8 @@ impl BruteforceHoleSolver {
         let mut vertices = self.solver.problem.figure.vertices.clone();
         let hole = self.solver.problem.hole.clone();
 
-        println!("Starting hole vertex bruteforce for ~{} iterations", self.total_steps);
+        println!("Bruteforce of hole size {} for figure size {}. It will take ~{} iterations",
+                 hole.len(), vertices.len(), self.total_steps);
         let (score, pose) = self.run(0, i64::MAX, &mut vertices, &hole);
         println!("Found solution with score {:?}: {:?}", score, pose);
         pose
