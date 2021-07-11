@@ -2434,6 +2434,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tools-bonus-table"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "log",
+ "pretty_env_logger",
+ "structopt",
+]
+
+[[package]]
 name = "tower-service"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
