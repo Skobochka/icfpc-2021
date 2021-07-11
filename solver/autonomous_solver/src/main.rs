@@ -64,7 +64,11 @@ pub enum Error {
     LoadPoseInvalidContent(problem::PoseValidationError),
     SolverCreate(solver::CreateError),
     PoseExport(problem::WriteFileError),
+    PoseSerialize(serde_json::Error),
     WorkerSpawn(io::Error),
+    WebClientBuilder(reqwest::Error),
+    WebClientSend(reqwest::Error),
+    WebClientHeader(reqwest::header::InvalidHeaderValue),
 }
 
 fn main() -> Result<(), Error> {
@@ -200,6 +204,24 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                         problem_desc.task_id,
                         problem_desc.pose_file,
                     );
+
+                    let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
+                    let mut headers = reqwest::header::HeaderMap::new();
+                    headers.insert(
+                        reqwest::header::AUTHORIZATION,
+                        reqwest::header::HeaderValue::from_str(&cli_args.api_token)
+                            .map_err(Error::WebClientHeader)?,
+                    );
+                    let body = serde_json::to_string(&pose)
+                        .map_err(Error::PoseSerialize)?;
+
+                    let send_result = reqwest::blocking::Client::builder()
+                        .default_headers(headers)
+                        .build().map_err(Error::WebClientBuilder)?
+                        .post(&url)
+                        .body(body)
+                        .send().map_err(Error::WebClientSend)?;
+                    log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
                 },
             solver::simulated_annealing::Fitness::FigureCorrupted { .. } |
             solver::simulated_annealing::Fitness::NotFitHole { .. } =>
