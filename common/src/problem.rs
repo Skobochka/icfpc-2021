@@ -583,5 +583,9 @@ mod tests {
             problem.score_vertices_check_stretching(&pose.vertices, None),
             Err(PoseValidationError::BrokenEdgesFound(vec![Edge(1, 2)])),
         );
+        assert_eq!(
+            problem.score_vertices(&pose.vertices, None),
+            Err(PoseValidationError::BrokenEdgesFound(vec![Edge(1, 2)])),
+        );
     }
 }
