@@ -185,11 +185,19 @@ impl Problem {
             _ => {
                 // Check stretching
                 let mut broken_edges = Vec::new();
+                let mut allow_broken = match bonus {
+                    Some(PoseBonus::Superflex { .. }) => 1,
+                    _ => 0,
+                };
                 for &Edge(from_idx, to_idx) in &self.figure.edges {
                     let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
                     let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
 
                     if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
+                        if allow_broken > 0 {
+                            allow_broken -= 1;
+                            continue;
+                        }
                         // log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
                         broken_edges.push(Edge(from_idx, to_idx));
                     }
