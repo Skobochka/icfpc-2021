@@ -19,6 +19,7 @@ pub struct Solver {
     problem: problem::Problem,
     pose: problem::Pose,
     pose_score: i64,
+    provide_bonuses: Vec<problem::PoseBonus>,
 }
 
 #[derive(Debug)]
@@ -28,7 +29,22 @@ pub enum CreateError {
 }
 
 impl Solver {
-    pub fn new(problem: &problem::Problem, pose: Option<problem::Pose>) -> Result<Solver, CreateError> {
+    pub fn new(
+        problem: &problem::Problem,
+        pose: Option<problem::Pose>,
+    )
+        -> Result<Solver, CreateError>
+    {
+        Solver::with_bonuses(problem, pose, Vec::new())
+    }
+
+    pub fn with_bonuses(
+        problem: &problem::Problem,
+        pose: Option<problem::Pose>,
+        provide_bonuses: Vec<problem::PoseBonus>,
+    )
+        -> Result<Solver, CreateError>
+    {
         if problem.hole.is_empty() {
             return Err(CreateError::NoPointsInHole);
         }
@@ -78,7 +94,7 @@ impl Solver {
         let pose = match pose {
             None => problem::Pose {
                 vertices: problem.figure.vertices.clone(),
-                bonuses: None,
+                bonuses: if provide_bonuses.is_empty() { None } else { Some(provide_bonuses.clone()) },
             },
             Some(pose) => pose,
         };
@@ -97,6 +113,7 @@ impl Solver {
             problem: problem.clone(),
             pose,
             pose_score,
+            provide_bonuses,
         })
     }
 

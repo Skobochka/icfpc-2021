@@ -1,6 +1,6 @@
 [package]
 name = "simulated_annealing"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["skobochka"]
 edition = "2018"
 
@@ -10,4 +10,5 @@ edition = "2018"
 common = { path = "../../common" }
 log = "^0.4"
 structopt = "^0.3"
+serde_json = "^1.0"
 pretty_env_logger = "^0.4"

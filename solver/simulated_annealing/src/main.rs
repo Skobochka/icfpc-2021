@@ -16,6 +16,9 @@ pub struct CliArgs {
     /// collect bonus for this task
     #[structopt(long = "collect-bonus-problem")]
     pub collect_bonus_problem: Option<usize>,
+    /// use given bonus during solving (json format)
+    #[structopt(long = "provide-bonus")]
+    pub provide_bonus: Option<String>,
 
     /// maximum reheats count
     #[structopt(long = "max-reheats-count", default_value = "5")]
@@ -40,6 +43,7 @@ pub enum Error {
     ProblemLoad(problem::FromFileError),
     SolverCreate(solver::CreateError),
     PoseExport(problem::WriteFileError),
+    IncorrectBonus(serde_json::Error),
 }
 
 fn main() -> Result<(), Error> {
@@ -54,9 +58,18 @@ fn main() -> Result<(), Error> {
     let pose = problem::Pose::from_file(&cli_args.common.pose_file).ok();
     log::debug!(" ;; pose loaded: {:?}", pose);
 
+    let provide_bonus: Option<problem::PoseBonus> = if let Some(bonus) = cli_args.provide_bonus {
+        Some(serde_json::from_str(&bonus).map_err(Error::IncorrectBonus)?)
+    } else {
+        None
+    };
+
     let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-        solver::Solver::new(&problem, pose)
-            .map_err(Error::SolverCreate)?,
+        solver::Solver::with_bonuses(
+            &problem,
+            pose,
+            if let Some(bonus) = provide_bonus { vec![bonus] } else { Vec::new() },
+        ).map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,
             cooling_step_temp: cli_args.cooling_step_temp,
