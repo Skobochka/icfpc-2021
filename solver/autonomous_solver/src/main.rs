@@ -181,8 +181,8 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             Err(solver::simulated_annealing::StepError::TempTooLow) if reheats_count < cli_args.max_reheats_count => {
                 log::debug!(
                     "temperature is too low for task {}: performing reheat ({} left)",
-                    cli_args.max_reheats_count - reheats_count,
                     problem_desc.task_id,
+                    cli_args.max_reheats_count - reheats_count,
                 );
                 solver.reheat(cli_args.reheat_factor);
                 reheats_count += 1;
