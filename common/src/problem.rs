@@ -106,10 +106,10 @@ pub enum WriteFileError {
     Serialize(serde_json::Error),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum PoseValidationError {
     VerticeCountMismatch,
-    BrokenEdgesFound(Vec<Edge>),
+    BrokenEdgesFound { ratio_sum: f64, broken_edges: Vec<Edge>, },
     EdgesNotFitHole(Vec<Edge>),
 }
 
@@ -160,7 +160,7 @@ impl Problem {
 
     pub fn score_vertices_check_stretching(&self,
                                            pose_vertices: &[Point],
-                                           bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
+                                           bonus: Option<PoseBonus>) -> Result<f64, PoseValidationError> {
         match bonus {
             Some(PoseBonus::Globalist { .. }) => {
                 // Check stretching
@@ -173,11 +173,12 @@ impl Problem {
 
                 }
 
-                if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > (self.figure.edges.len() as f64 * self.epsilon as f64) / 1000000_f64 {
-                     return Err(PoseValidationError::BrokenEdgesFound(vec![]));
+                let ratio_sum = ((d_after as f64) / (d_before as f64) - 1_f64).abs();
+                if ratio_sum > (self.figure.edges.len() as f64 * self.epsilon as f64) / 1000000_f64 {
+                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges: vec![], });
                 }
 
-                Ok(())
+                Ok(ratio_sum)
             }
             Some(PoseBonus::BreakALeg { .. }) => {
                 unimplemented!("BREAK_A_LEG is not supported yet");
@@ -189,11 +190,14 @@ impl Problem {
                     Some(PoseBonus::Superflex { .. }) => 1,
                     _ => 0,
                 };
+                let mut ratio_sum = 0.0;
                 for &Edge(from_idx, to_idx) in &self.figure.edges {
                     let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
                     let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
 
-                    if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
+                    let ratio = ((d_after as f64) / (d_before as f64) - 1_f64).abs();
+                    ratio_sum += ratio;
+                    if ratio > self.epsilon as f64 / 1000000_f64 {
                         if allow_broken > 0 {
                             allow_broken -= 1;
                             continue;
@@ -203,10 +207,10 @@ impl Problem {
                     }
                 }
                 if !broken_edges.is_empty() {
-                    return Err(PoseValidationError::BrokenEdgesFound(broken_edges));
+                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges, });
                 }
 
-                Ok(())
+                Ok(ratio_sum)
             }
         }
     }
@@ -292,7 +296,7 @@ impl Problem {
             let mut new_figure = self.figure.clone();
             new_figure.import_from_geo(new_geo_figure.points).unwrap();
             match self.score_vertices(&new_figure.vertices, None) {
-                Err(PoseValidationError::BrokenEdgesFound(_)) |
+                Err(PoseValidationError::BrokenEdgesFound { .. }) |
                 Err(PoseValidationError::VerticeCountMismatch) => continue,
                 _ => { angles.push(angle as f64); }
             }
@@ -311,7 +315,7 @@ impl Problem {
             let mut new_figure = self.figure.clone();
             new_figure.import_from_geo(new_geo_figure.points).unwrap();
             match self.score_vertices(&new_figure.vertices, None) {
-                Err(PoseValidationError::BrokenEdgesFound(_)) |
+                Err(PoseValidationError::BrokenEdgesFound { .. }) |
                 Err(PoseValidationError::VerticeCountMismatch) => continue,
                 _ => { angles.push(angle as f64); }
             }
@@ -331,7 +335,7 @@ impl Problem {
             let mut new_figure = self.figure.clone();
             new_figure.import_from_geo(new_geo_figure.points).unwrap();
             match self.score_vertices(&new_figure.vertices, None) {
-                Err(PoseValidationError::BrokenEdgesFound(_)) |
+                Err(PoseValidationError::BrokenEdgesFound { .. }) |
                 Err(PoseValidationError::VerticeCountMismatch) => continue,
                 _ => { angles.push(angle as f64); }
             }
@@ -609,8 +613,7 @@ mod tests {
     #[test]
     fn score_vertices_check_stretching() {
         let problem: Problem = serde_json::from_str(PROBLEM_13_JSON).unwrap();
-        assert_eq!(problem.score_vertices_check_stretching(&vec![Point(15,21), Point(34,0), Point(0,45), Point(19,24)], None),
-                   Ok(()));
+        assert!(problem.score_vertices_check_stretching(&vec![Point(15,21), Point(34,0), Point(0,45), Point(19,24)], None).is_ok());
         assert!(problem.score_vertices_check_stretching(&vec![Point(15,0), Point(34,0), Point(0,45), Point(19,24)], None).is_err());
         // TODO: add more tests
     }
@@ -619,7 +622,7 @@ mod tests {
     fn score_vertices_check_hole() {
         let problem: Problem = serde_json::from_str(PROBLEM_13_JSON).unwrap();
         assert!(problem.score_vertices_check_hole(&vec![Point(15,21), Point(34,0), Point(0,45), Point(19,24)], None).is_err());
-        assert_eq!(problem.score_vertices_check_hole(&vec![Point(20,0), Point(0,20), Point(20,40), Point(19,24)], None), Ok(()));
+        assert!(problem.score_vertices_check_hole(&vec![Point(20,0), Point(0,20), Point(20,40), Point(19,24)], None).is_ok());
         // TODO: add more tests
     }
 
@@ -642,13 +645,13 @@ mod tests {
             r#"{"vertices":[[18,81],[40,46],[28,23],[22,53],[38,61],[51,23],[42,33],[48,56],[32,38]],"bonuses":null}"#,
         ).unwrap();
 
-        assert_eq!(
+        assert!(matches!(
             problem.score_vertices_check_stretching(&pose.vertices, None),
-            Err(PoseValidationError::BrokenEdgesFound(vec![Edge(1, 2)])),
-        );
-        assert_eq!(
+            Err(PoseValidationError::BrokenEdgesFound { broken_edges, .. }) if broken_edges == vec![Edge(1, 2)],
+        ));
+        assert!(matches!(
             problem.score_vertices(&pose.vertices, None),
-            Err(PoseValidationError::BrokenEdgesFound(vec![Edge(1, 2)])),
-        );
+            Err(PoseValidationError::BrokenEdgesFound { broken_edges, .. }) if broken_edges == vec![Edge(1, 2)],
+        ));
     }
 }

@@ -234,12 +234,17 @@ fn generate_vertices(
 impl Fitness {
     fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::PoseBonus]) -> Self {
         let mut is_ok = true;
-        let mut ratio_sum = 0.0;
-        for edge in &problem.figure.edges {
-            let (is_valid, ratio) = solver::is_edge_ratio_valid(edge, vertices, problem, bonuses);
-            if !is_valid { is_ok = false; }
-            ratio_sum += ratio;
-        }
+        let ratio_sum = match problem.score_vertices_check_stretching(vertices, bonuses.get(0).cloned()) {
+            Ok(ratio_sum) =>
+                ratio_sum,
+            Err(problem::PoseValidationError::BrokenEdgesFound { ratio_sum, .. }) => {
+                is_ok = false;
+                ratio_sum
+            },
+            Err(..) =>
+                unreachable!(),
+        };
+
         let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
         if is_ok {
             match problem.score_vertices(vertices, bonuses.get(0).cloned()) {
@@ -247,7 +252,7 @@ impl Fitness {
                     Fitness::FigureScored { score, },
                 Err(problem::PoseValidationError::VerticeCountMismatch) =>
                     panic!("unexpected PoseValidationError::VerticeCountMismatch on vertices_cur.len() = {}", vertices.len()),
-                Err(problem::PoseValidationError::BrokenEdgesFound(broken_edges)) =>
+                Err(problem::PoseValidationError::BrokenEdgesFound { broken_edges, .. }) =>
                     panic!("unexpected PoseValidationError::Broken_Edges on broken_edges = {:?}", broken_edges),
                 Err(problem::PoseValidationError::EdgesNotFitHole(not_fit_edges)) =>
                     Fitness::NotFitHole { bad_edges_count: not_fit_edges.len(), ratio_avg, },
