@@ -75,11 +75,11 @@ impl BruteforceHoleSolver {
                     if eps > max_eps{
                         // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
                         if vert_idx == 0 {
-                            println!("skipped {}..., eps: {}, max_eps: {}", progress, eps, max_eps);
+                            println!("skipped {}..., eps: {}, max_eps: {}, orig_eps: {}", progress, eps, max_eps, self.solver.problem.epsilon as f64 / 1000000_f64);
                             progress += 1;
                         }
                         if vert_idx == 1 {
-                            println!(" + skipped {}..., eps: {}, max_eps: {}", progress, eps, max_eps);
+                            println!(" + skipped {}..., eps: {}, max_eps: {}, orig_eps: {}", progress, eps, max_eps, self.solver.problem.epsilon as f64 / 1000000_f64);
                             progress += 1;
                         }
                         if vert_idx == 2 {
@@ -130,9 +130,7 @@ impl BruteforceHoleSolver {
 
             vertices[vert_idx] = *hole_vertice;
             let (new_score, new_pose) = if vert_idx == vertices.len() - 1 {
-                println!("NOT SKIPPED");
-                // self.track_progress(1);
-                // self.track_progress(vert_idx, hole_idx);
+                // println!("NOT SKIPPED");
                 match self.solver.problem.score_vertices(vertices, bonus) {
                     Ok(score) => (score, Some(problem::Pose {
                         vertices: vertices.clone(),
