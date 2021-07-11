@@ -190,8 +190,6 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             Err(solver::simulated_annealing::StepError::TempTooLow) => {
                 log::debug!("annealing done for task {}", problem_desc.task_id);
                 if let Some((pose, score)) = submission {
-                    log::info!("preparing submission for for task {} with score {}", problem_desc.task_id, score);
-
                     let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
                     let mut headers = reqwest::header::HeaderMap::new();
                     let mut auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer: {}", cli_args.api_token))
@@ -200,6 +198,14 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                     headers.insert(reqwest::header::AUTHORIZATION, auth_value);
                     let body = serde_json::to_string(&pose)
                         .map_err(Error::PoseSerialize)?;
+
+                    log::info!(
+                        "preparing submission for for task {} with score {} to {:?}, headers: {:?}",
+                        problem_desc.task_id,
+                        score,
+                        url,
+                        headers,
+                    );
 
                     let send_result = reqwest::blocking::Client::builder()
                         .default_headers(headers)
