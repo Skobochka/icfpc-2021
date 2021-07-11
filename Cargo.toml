@@ -5,4 +5,5 @@ members = [
     "solver/bruteforce",
     "solver/bruteforce_hole",
     "solver/simulated_annealing",
+    "solver/autonomous_solver",
 ]

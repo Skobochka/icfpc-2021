@@ -147,25 +147,17 @@ impl Problem {
     }
 
     pub fn score_vertices_check_stretching(&self, pose_vertices: &[Point]) -> Result<(), PoseValidationError> {
-        let vertices_buf: Vec<(&Point, &Point)> = self.figure.vertices.iter().zip(pose_vertices.iter()).collect();
-        let broken_edges: Vec<Edge> = self.figure.edges.iter().filter(|edge| {
-            match edge {
-                Edge(from_idx, to_idx) => {
-                    let d_before = distance(vertices_buf[*from_idx].0, vertices_buf[*to_idx].0);
-                    let d_after = distance(vertices_buf[*from_idx].1, vertices_buf[*to_idx].1);
-
-                    if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
-                        // log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
-                        true
-                    }
-                    else {
-                        false
-                    }
-
-                }
+        // Check stretching
+        let mut broken_edges = Vec::new();
+        for &Edge(from_idx, to_idx) in &self.figure.edges {
+            let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
+            let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
+            if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
+                // log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
+                broken_edges.push(Edge(from_idx, to_idx));
             }
-        }).map(|item| item.clone()).collect();
-        if broken_edges.len() > 0 {
+        }
+        if !broken_edges.is_empty() {
             return Err(PoseValidationError::BrokenEdgesFound(broken_edges));
         }
 
@@ -174,22 +166,20 @@ impl Problem {
 
     pub fn score_vertices_check_hole(&self, pose_vertices: &[Point]) -> Result<(), PoseValidationError> {
         let geo_hole = self.hole_polygon_f64();
-        let edges_out_of_hole: Vec<Edge> = self.figure.edges.iter()
-            .filter_map(|edge| {
-                let Edge(from_idx, to_idx) = edge;
-                let geo_edge = geo::Line {
-                    start: geo::Coordinate::from(pose_vertices[*from_idx]),
-                    end: geo::Coordinate::from(pose_vertices[*to_idx])
-                };
-                if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
-                    None
-                }
-                else {
-                    Some(edge)
-                }
-            }).map(|item| item.clone()).collect();
-
-        if edges_out_of_hole.len() > 0 {
+        let mut edges_out_of_hole = Vec::new();
+        for &Edge(from_idx, to_idx) in &self.figure.edges {
+            let geo_edge = geo::Line {
+                start: geo::Coordinate::from(pose_vertices[from_idx]),
+                end: geo::Coordinate::from(pose_vertices[to_idx])
+            };
+            if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
+                // ok
+            }
+            else {
+                edges_out_of_hole.push(Edge(from_idx, to_idx));
+            }
+        }
+        if !edges_out_of_hole.is_empty() {
             return Err(PoseValidationError::EdgesNotFitHole(edges_out_of_hole));
         }
 
