@@ -440,6 +440,11 @@ impl Pose {
         serde_json::to_writer(writer, self)
             .map_err(WriteFileError::Serialize)
     }
+
+    pub fn bonus(&self) -> Option<PoseBonus> {
+        self.bonuses.as_ref()
+            .map_or(None, |bonus_vec| Some(bonus_vec[0]))
+    }
 }
 
 impl From<Point> for geo::Point<i64> {

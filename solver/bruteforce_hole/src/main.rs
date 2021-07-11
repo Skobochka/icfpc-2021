@@ -14,6 +14,8 @@ use common::{
 pub struct CliArgs {
     #[structopt(flatten)]
     pub common: cli::CommonCliArgs,
+    #[structopt(long = "use-bonus")]
+    pub use_bonus: Option<String>,
 }
 
 
@@ -33,11 +35,33 @@ fn main() -> Result<(), Error> {
         .map_err(Error::ProblemLoad)?;
     log::debug!(" ;; problem loaded: {:?}", problem);
 
-    let pose = problem::Pose::from_file(&cli_args.common.pose_file).ok();
+    let mut pose: problem::Pose = problem::Pose::from_file(&cli_args.common.pose_file)
+        .ok()
+        .unwrap_or_else(|| problem.export_pose());
     log::debug!(" ;; pose loaded: {:?}", pose);
 
+    match cli_args.use_bonus {
+        Some(ref a) if a == "GLOBALIST" => {
+            pose.bonuses = Some(vec![ problem::PoseBonus::Globalist {
+                problem: problem::ProblemId(0), // todo: add correct number here!
+            }]);
+        },
+        Some(ref a) if a == "WALLHACK" => {
+            pose.bonuses = Some(vec![ problem::PoseBonus::Wallhack {
+                problem: problem::ProblemId(0), // todo: add correct number here!
+            }]);
+        },
+        Some(ref a) if a == "SUPERFLEX" => {
+            pose.bonuses = Some(vec![ problem::PoseBonus::Superflex {
+                problem: problem::ProblemId(0), // todo: add correct number here!
+            }]);
+        },
+        Some(a) => unimplemented!("Unknown bonus type '{}'", a),
+        _ => {},
+    };
+
     let mut solver = solver::bruteforce_hole::BruteforceHoleSolver::new(
-        solver::Solver::new(&problem, pose)
+        solver::Solver::new(&problem, Some(pose))
             .map_err(Error::SolverCreate)?,
         );
 
