@@ -64,12 +64,23 @@ impl BruteforceHoleSolver {
                 Some(problem::PoseBonus::Globalist {..}) => {
                     let mut eps = 0_f64;
                     for idx in 0..vert_idx {
-                        let d_before = distances[vert_idx*vertices.len()+idx];
-                        if d_before == -1 {
-                            continue;
+                        for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
+                            if from_idx != vert_idx {
+                                continue;
+                            }
+                            if to_idx > vert_idx {
+                                continue;
+                            }
+
+                            let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
+                            let d_after = problem::distance(&hole_vertice, &vertices[idx]);
+                            eps += ((d_after as f64 / d_before as f64) - 1_f64).abs();
                         }
-                        let d_after = problem::distance(&hole_vertice, &vertices[idx]);
-                        eps += ((d_after as f64 / d_before as f64) - 1_f64).abs();
+
+                        // //let d_before = distances[vert_idx*vertices.len()+idx];
+                        // if d_before == -1 {
+                        //     continue;
+                        // }
                     }
                     let max_eps = self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64 / 1000000_f64 ;
                     if eps > max_eps{
@@ -94,37 +105,41 @@ impl BruteforceHoleSolver {
                         Some(problem::PoseBonus::Superflex {..}) => 1,
                         _ => 0,
                     };
-
                     for idx in 0..vert_idx {
-                        let edge_distance = distances[vert_idx*vertices.len()+idx];
-                        if edge_distance == -1 {
-                            continue;
-                        }
-                        let distance = problem::distance(&hole_vertice, &vertices[idx]);
-
-                        if ((distance as f64 / edge_distance as f64) - 1_f64).abs() > self.solver.problem.epsilon as f64 / 1000000_f64 {
-                            if superstretch_allow > 0 {
-                                superstretch_allow = 0;
+                        for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
+                            if from_idx != vert_idx {
+                                continue;
+                            }
+                            if to_idx > vert_idx {
                                 continue;
                             }
 
-                            // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
-                            if vert_idx == 0 {
-                                println!("skipped {}...", progress);
-                                progress += 1;
+                            let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
+                            let d_after = problem::distance(&hole_vertice, &vertices[idx]);
+
+                            if ((d_after as f64 / d_before as f64) - 1_f64).abs() > self.solver.problem.epsilon as f64 / 1000000_f64 {
+                                if superstretch_allow > 0 {
+                                    superstretch_allow = 0;
+                                    continue;
+                                }
+
+                                // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
+                                if vert_idx == 0 {
+                                    println!("skipped {}...", progress);
+                                    progress += 1;
+                                }
+                                if vert_idx == 1 {
+                                    println!(" + skipped {}...", progress);
+                                    progress += 1;
+                                }
+                                if vert_idx == 3 {
+                                    println!("  ++  skipped {}...", progress);
+                                    progress += 1;
+                                }
+                                continue 'next_hole_vertice;
                             }
-                            if vert_idx == 1 {
-                                println!(" + skipped {}...", progress);
-                                progress += 1;
-                            }
-                            if vert_idx == 3 {
-                                println!("  ++  skipped {}...", progress);
-                                progress += 1;
-                            }
-                            continue 'next_hole_vertice;
                         }
                     }
-
                 }
             }
 
