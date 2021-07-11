@@ -62,6 +62,8 @@ pub enum ProblemBonusType {
     BreakALeg,
     #[serde(rename = "GLOBALIST")]
     Globalist,
+    #[serde(rename = "WALLHACK")]
+    Wallhack,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -77,6 +79,10 @@ pub enum PoseBonus {
     },
     #[serde(rename = "GLOBALIST")]
     Globalist {
+        problem: ProblemId,
+    },
+    #[serde(rename = "WALLHACK")]
+    Wallhack {
         problem: ProblemId,
     },
 }
