@@ -3,6 +3,7 @@
 // };
 
 use std::{
+    cmp,
     collections::HashSet,
     iter::FromIterator,
 };
@@ -15,6 +16,24 @@ use crate::{
 #[allow(dead_code)]
 pub struct BruteforceHoleSolver {
     solver: solver::Solver,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct BoundingBox(problem::Point, problem::Point);
+
+impl BoundingBox {
+    pub fn point_set(&self) -> HashSet<problem::Point> {
+        let capacity = ((self.0.0 - self.1.0).abs() * (self.0.1 - self.1.1).abs()) as usize;
+        let mut set = HashSet::with_capacity(capacity);
+
+        for x in cmp::max(0, cmp::min(self.0.0, self.1.0))..cmp::max(self.0.0, self.1.0) {
+            for y in cmp::max(0, cmp::min(self.0.1, self.1.1))..cmp::max(self.0.1, self.1.1) {
+                set.insert(problem::Point(x, y));
+            }
+        }
+
+        set
+    }
 }
 
 impl BruteforceHoleSolver {
@@ -191,17 +210,121 @@ impl BruteforceHoleSolver {
         }
 
         if hole.is_empty() {
-            // println!("Hole bruteforce reached its end. We have {} vertices left: {:?}",
-            //          vertices.len() - vert_idx, &vertices[vert_idx..]);
+            // // println!("Hole bruteforce reached its end. We have {} vertices left: {:?}",
+            // //          vertices.len() - vert_idx, &vertices[vert_idx..]);
 
-            // println!("Running plain bruteforce to complete the task");
-            return self.run_plain_bruteforce(self.solver.field_min, vert_idx, best_pose_score,
-                                             vertices, distances, bonus);
+            // // println!("Running plain bruteforce to complete the task");
+            // return self.run_plain_bruteforce(self.solver.field_min, vert_idx, best_pose_score,
+            //                                  vertices, distances, bonus);
+            return self.run_bounding_box(vert_idx,
+                                         best_pose_score,
+                                         vertices, distances, bonus);
         }
 
         (best_pose_score, best_pose)
     }
 
+    fn run_bounding_box(&self,
+                        vert_idx: usize,
+                        last_best_score: i64,
+                        vertices: &mut Vec<problem::Point>,
+                        distances: &[i64],
+                        bonus: Option<problem::PoseBonus>) -> (i64, Option<problem::Pose>) {
+        let mut best_pose_score = last_best_score;
+        let mut best_pose = None;
+
+        for point in self.point_set_for_vertice(vert_idx, vertices, distances, bonus) {
+            vertices[vert_idx] = point;
+            let (new_score, new_pose) = if vert_idx == vertices.len() - 1 {
+                match self.solver.problem.score_vertices(vertices, bonus) {
+                    Ok(score) => (score, Some(problem::Pose {
+                        vertices: vertices.clone(),
+                        bonuses: bonus.map(|b| vec![b]),
+                    })),
+                    Err(_) => (i64::MAX, None),
+                    // Err(e) => {println!("Got error {:?}", e); (i64::MAX, None)},
+                }
+            }
+            else {
+                self.run_bounding_box(vert_idx + 1, best_pose_score, vertices, distances, bonus)
+            };
+
+            if new_score == 0 {
+                // perfect match
+                return (0, Some(problem::Pose {
+                    vertices: vertices.clone(),
+                    bonuses: bonus.map(|b| vec![b]),
+                }))
+            }
+            else if new_score < self.solver.pose_score {
+                // improvement match
+                best_pose_score = new_score;
+                best_pose = new_pose;
+            }
+        }
+
+        (best_pose_score, best_pose)
+    }
+
+    fn point_set_for_vertice(&self,
+                             vert_idx: usize,
+                             vertices: &mut Vec<problem::Point>,
+                             distances: &[i64],
+                             _bonus: Option<problem::PoseBonus>) -> HashSet<problem::Point>{
+        let mut pointset: HashSet<problem::Point> = HashSet::new();
+        let mut pointset_ready = false;
+
+        // ...find all edges...
+        for &problem::Edge(from_idx, to_idx) in &self.solver.problem.figure.edges {
+            // println!("processing Edge: {} => {} for vert_idx: {}", from_idx, to_idx, vert_idx);
+            let idx: usize;
+            if from_idx == vert_idx {
+                idx = to_idx;
+            }
+            else if to_idx == vert_idx {
+                idx = from_idx;
+            }
+            else { continue; }
+
+            // ...starting from it.
+            if idx > vert_idx {
+                /* This point not yet placed, ignore it */
+                continue;
+            }
+
+            // TODO: here we need support for globalist, superflex, and other shit like that
+            let edge_budget = distances[vert_idx * vertices.len() + idx] * 2;
+
+            if !pointset_ready {
+                pointset = self.points_within_distance(vertices[idx], edge_budget);
+                pointset_ready = true;
+            }
+            else {
+                pointset = pointset
+                    .intersection(&self.points_within_distance(vertices[idx], edge_budget))
+                    .cloned()
+                    .collect();
+            }
+        }
+
+        // println!("point_set_for_verticle: {:?}", pointset);
+        pointset
+    }
+
+    fn points_within_distance(&self, point: problem::Point, distance: i64) -> HashSet<problem::Point>{
+        // IMPORTANT: `distance` is SQUARE distance
+        let length = (distance as f64).sqrt() as i64 + 1; // +1 just to be sure :)
+
+        let pointset = BoundingBox(problem::Point(point.0 - length, point.1 - length),
+                                   problem::Point(point.0 + length, point.1 + length))
+            .point_set();
+
+        // println!("points_within_distance({:?}, {}): {:?}", point, distance, pointset);
+
+        pointset
+    }
+
+    #[allow(dead_code)]
     fn run_plain_bruteforce(&self,
                             start: problem::Point, vert_idx: usize, last_best: i64,
                             vertices: &mut Vec<problem::Point>,
