@@ -19,7 +19,7 @@ pub struct Solver {
     problem: problem::Problem,
     pose: problem::Pose,
     pose_score: i64,
-    unlocked_bonuses: Vec<problem::ProblemBonusType>,
+    use_bonus: Option<problem::ProblemBonusType>,
 }
 
 #[derive(Debug)]
@@ -35,13 +35,13 @@ impl Solver {
     )
         -> Result<Solver, CreateError>
     {
-        Solver::with_bonuses(problem, pose, Vec::new())
+        Solver::with_bonus(problem, pose, None)
     }
 
-    pub fn with_bonuses(
+    pub fn with_bonus(
         problem: &problem::Problem,
         pose: Option<problem::Pose>,
-        unlocked_bonuses: Vec<problem::ProblemBonusType>,
+        use_bonus: Option<problem::ProblemBonusType>,
     )
         -> Result<Solver, CreateError>
     {
@@ -113,7 +113,7 @@ impl Solver {
             problem: problem.clone(),
             pose,
             pose_score,
-            unlocked_bonuses,
+            use_bonus,
         })
     }
 

@@ -65,20 +65,20 @@ fn main() -> Result<(), Error> {
     };
 
     let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-        solver::Solver::with_bonuses(
+        solver::Solver::with_bonus(
             &problem,
             pose,
             match unlocked_bonus {
                 None =>
-                    Vec::new(),
+                    None,
                 Some(problem::PoseBonus::BreakALeg { .. }) =>
-                    vec![problem::ProblemBonusType::BreakALeg],
+                    Some(problem::ProblemBonusType::BreakALeg),
                 Some(problem::PoseBonus::Globalist { .. }) =>
-                    vec![problem::ProblemBonusType::Globalist],
+                    Some(problem::ProblemBonusType::Globalist),
                 Some(problem::PoseBonus::Wallhack { .. }) =>
-                    vec![problem::ProblemBonusType::Wallhack],
+                    Some(problem::ProblemBonusType::Wallhack),
                 Some(problem::PoseBonus::Superflex { .. }) =>
-                    vec![problem::ProblemBonusType::Superflex],
+                    Some(problem::ProblemBonusType::Superflex),
             },
         ).map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {

@@ -146,13 +146,15 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     let problem = problem::Problem::from_file(&problem_desc.problem_file)
         .map_err(Error::ProblemLoad)?;
 
+    let mut has_unlocked_bonuses = false;
     let maybe_pose_score = match problem::Pose::from_file(&problem_desc.pose_file) {
         Ok(pose) => {
             if let Some(ref bonuses) = problem.bonuses {
                 for bonus in bonuses {
                     if pose.vertices.iter().find(|v| v == &&bonus.position).is_some() {
-                        log::info!("skipping task {} because of bonuses unlocked", problem_desc.task_id);
-                        return Ok(());
+                        has_unlocked_bonuses = true;
+                        log::debug!("task {} has unlocked bonuses", problem_desc.task_id);
+                        break;
                     }
                 }
             }
@@ -173,8 +175,6 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             return Err(Error::PoseLoad(error)),
     };
 
-    log::info!("slave started task {}, current pose score: {:?}", problem_desc.task_id, maybe_pose_score.as_ref().map(|ps| ps.1));
-
     let (mut best_solution, maybe_pose) = match maybe_pose_score {
         Some((pose, score)) =>
             (Some(score), Some(pose)),
@@ -182,8 +182,67 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             (None, None),
     };
 
+    let allowed_unlocked_bonuses: Vec<_> = problem_desc
+        .unlocked_bonuses
+        .iter()
+        .filter(|unlocked_bonus| match unlocked_bonus {
+            problem::ProblemBonusType::Globalist |
+            problem::ProblemBonusType::Superflex |
+            problem::ProblemBonusType::Wallhack =>
+                true,
+            problem::ProblemBonusType::BreakALeg =>
+                false,
+        })
+        .collect();
+
+    if allowed_unlocked_bonuses.is_empty() {
+        slave_run_task_with(
+            problem_desc,
+            &problem,
+            &maybe_pose,
+            &mut best_solution,
+            cli_args,
+            None,
+            solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+        )?;
+    } else {
+        for &unlocked_bonus in allowed_unlocked_bonuses {
+            slave_run_task_with(
+                problem_desc,
+                &problem,
+                &maybe_pose,
+                &mut best_solution,
+                cli_args,
+                Some(unlocked_bonus),
+                solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+            )?;
+        }
+    };
+
+    Ok(())
+}
+
+fn slave_run_task_with(
+    problem_desc: &ProblemDesc,
+    problem: &problem::Problem,
+    maybe_pose: &Option<problem::Pose>,
+    best_solution: &mut Option<i64>,
+    cli_args: &CliArgs,
+    use_bonus: Option<problem::ProblemBonusType>,
+    operating_mode: solver::simulated_annealing::OperatingMode,
+)
+    -> Result<(), Error>
+{
+    log::info!(
+        "slave started task {}, current pose score: {:?}, use_bonus: {:?}, operating_mode = {:?}",
+        problem_desc.task_id,
+        best_solution,
+        use_bonus,
+        operating_mode,
+    );
+
     let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-        solver::Solver::with_bonuses(&problem, maybe_pose, problem_desc.unlocked_bonuses.clone())
+        solver::Solver::with_bonus(problem, maybe_pose.as_ref().map(Clone::clone), use_bonus)
             .map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,
@@ -191,7 +250,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             minimum_temp: 2.0,
             valid_edge_accept_prob: cli_args.valid_edge_accept_prob,
             iterations_per_cooling_step: cli_args.iterations_per_cooling_step,
-            operating_mode: solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+            operating_mode,
         },
     );
 
@@ -225,7 +284,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         match solver.fitness() {
             solver::simulated_annealing::Fitness::FigureScored { score, } =>
                 if best_solution.map_or(true, |best_score| score < best_score) {
-                    best_solution = Some(score);
+                    *best_solution = Some(score);
                     let pose = problem::Pose {
                         vertices: solver.vertices().to_vec(),
                         bonuses: None,

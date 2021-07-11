@@ -53,7 +53,7 @@ impl SimulatedAnnealingSolver {
         generate_vertices(&solver, &mut vertices_cur, &mut frozen_vertices_indices, params.operating_mode);
 
         let temp = params.max_temp;
-        let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur, &solver.unlocked_bonuses);
+        let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur, &solver.use_bonus);
 
         SimulatedAnnealingSolver {
             solver,
@@ -71,7 +71,7 @@ impl SimulatedAnnealingSolver {
         generate_vertices(&self.solver, &mut self.vertices_cur, &mut self.frozen_vertices_indices, self.params.operating_mode);
         self.temp = self.params.max_temp;
         self.steps = 0;
-        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur, &self.solver.unlocked_bonuses);
+        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur, &self.solver.use_bonus);
     }
 
     pub fn reheat(&mut self, temp_factor: f64) {
@@ -103,7 +103,7 @@ impl SimulatedAnnealingSolver {
             let vertex_index = loop {
                 let edge_index = rng.gen_range(0 .. self.solver.problem.figure.edges.len());
                 let edge = &self.solver.problem.figure.edges[edge_index];
-                if self.solver.unlocked_bonuses.is_empty() {
+                if self.solver.use_bonus.is_none() {
                     let (is_valid, _ratio) = solver::is_edge_ratio_valid(
                         edge,
                         &self.vertices_tmp,
@@ -140,7 +140,7 @@ impl SimulatedAnnealingSolver {
                 }
             };
             self.vertices_tmp[vertex_index] = moved_vertex;
-            let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.unlocked_bonuses);
+            let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.use_bonus);
 
             let energy_cur = self.fitness_cur.energy();
             let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
@@ -238,10 +238,8 @@ fn generate_vertices(
 }
 
 impl Fitness {
-    fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::ProblemBonusType]) -> Self {
-
-        // TODO: here we are forced to use only Globalist bonuses
-        let maybe_pose_bonus = match bonuses.iter().find(|bonus| if let problem::ProblemBonusType::Globalist = bonus { true } else { false }) {
+    fn calc(problem: &problem::Problem, vertices: &[problem::Point], use_bonus: &Option<problem::ProblemBonusType>) -> Self {
+        let maybe_pose_bonus = match use_bonus {
             None =>
                 None,
             Some(problem::ProblemBonusType::BreakALeg) =>
