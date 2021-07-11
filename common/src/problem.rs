@@ -658,4 +658,28 @@ mod tests {
             Err(PoseValidationError::BrokenEdgesFound { broken_edges, .. }) if broken_edges == vec![Edge(1, 2)],
         ));
     }
+
+    #[test]
+    fn score_vertices_check_hole_with_wallhack() {
+        let problem: Problem = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"GLOBALIST","problem":9,"position":[0,8]},{"bonus":"GLOBALIST","problem":70,"position":[33,48]},{"bonus":"WALLHACK","problem":91,"position":[42,33]}],"hole":[[21,35],[0,22],[26,14],[0,8],[15,0],[45,0],[52,12],[52,48],[51,60],[49,86],[38,73],[17,85],[31,92],[24,103],[2,103],[0,85],[0,52],[8,41]],"epsilon":17065,"figure":{"edges":[[0,1],[0,2],[1,2]],"vertices":[[0,75],[7,0],[10,26]]}}"#,
+        ).unwrap();
+        let pose_vertices = vec![
+            Point(32, 47), Point(34, 47), Point(33, 48),
+        ];
+        assert_eq!(problem.score_vertices_check_hole(&pose_vertices, None), Ok(()));
+        assert_eq!(problem.score_vertices_check_hole(&pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })), Ok(()));
+
+        let pose_vertices = vec![
+            Point(32, 47), Point(0, 48), Point(33, 48),
+        ];
+        assert!(problem.score_vertices_check_hole(&pose_vertices, None).is_err());
+        assert_eq!(problem.score_vertices_check_hole(&pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })), Ok(()));
+
+        let pose_vertices = vec![
+            Point(0, 48), Point(34, 47), Point(1000, 48),
+        ];
+        assert!(problem.score_vertices_check_hole(&pose_vertices, None).is_err());
+        assert!(problem.score_vertices_check_hole(&pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })).is_err());
+    }
 }
