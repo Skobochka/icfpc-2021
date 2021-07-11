@@ -938,11 +938,14 @@ impl Env {
         match &self.solver_mode {
             SolverMode::None =>
                 self.problem.export_pose(),
-            SolverMode::SimulatedAnnealing { solver, } =>
-                problem::Pose {
+            SolverMode::SimulatedAnnealing { solver, } => {
+                let pose = problem::Pose {
                     vertices: solver.vertices().to_vec(),
                     bonuses: None,
-                },
+                };
+                assert!(self.problem.score_vertices(&pose.vertices, None).is_ok());
+                pose
+            },
         }
     }
 
