@@ -69,7 +69,7 @@ impl BruteforceSolver {
                 if vert_idx == vertices.len() - 1 {
                     // log::debug!("scoring candidate... {:?}", vertices);
 
-                    match self.solver.problem.score_vertices(vertices, &None) {
+                    match self.solver.problem.score_vertices(vertices, None) {
                         Ok(score) => {
                             // log::debug!("Found solution with score {:?}: {:?}", score, vertices);
                             if score == 0 { // perfect solution found

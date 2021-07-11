@@ -53,7 +53,7 @@ impl BruteforceHoleSolver {
             let (new_score, new_pose) = if vert_idx == vertices.len() - 1 {
                 self.track_progress();
                 // self.track_progress(vert_idx, hole_idx);
-                match self.solver.problem.score_vertices(vertices, &None) {
+                match self.solver.problem.score_vertices(vertices, None) {
                     Ok(score) => (score, Some(problem::Pose {
                         vertices: vertices.clone(),
                         bonuses: None, // fixme
