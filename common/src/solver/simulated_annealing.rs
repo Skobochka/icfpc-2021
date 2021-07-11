@@ -53,7 +53,7 @@ impl SimulatedAnnealingSolver {
         generate_vertices(&solver, &mut vertices_cur, &mut frozen_vertices_indices, params.operating_mode);
 
         let temp = params.max_temp;
-        let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur, &solver.provide_bonuses);
+        let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur, &solver.unlocked_bonuses);
 
         SimulatedAnnealingSolver {
             solver,
@@ -71,7 +71,7 @@ impl SimulatedAnnealingSolver {
         generate_vertices(&self.solver, &mut self.vertices_cur, &mut self.frozen_vertices_indices, self.params.operating_mode);
         self.temp = self.params.max_temp;
         self.steps = 0;
-        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur, &self.solver.provide_bonuses);
+        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur, &self.solver.unlocked_bonuses);
     }
 
     pub fn reheat(&mut self, temp_factor: f64) {
@@ -103,12 +103,11 @@ impl SimulatedAnnealingSolver {
             let vertex_index = loop {
                 let edge_index = rng.gen_range(0 .. self.solver.problem.figure.edges.len());
                 let edge = &self.solver.problem.figure.edges[edge_index];
-                if self.solver.provide_bonuses.is_empty() {
+                if self.solver.unlocked_bonuses.is_empty() {
                     let (is_valid, _ratio) = solver::is_edge_ratio_valid(
                         edge,
                         &self.vertices_tmp,
                         &self.solver.problem,
-                        &self.solver.provide_bonuses,
                     );
                     if is_valid {
                         let accept_prob = rng.gen_range(0.0 .. 1.0);
@@ -141,7 +140,7 @@ impl SimulatedAnnealingSolver {
                 }
             };
             self.vertices_tmp[vertex_index] = moved_vertex;
-            let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.provide_bonuses);
+            let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.unlocked_bonuses);
 
             let energy_cur = self.fitness_cur.energy();
             let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
@@ -239,9 +238,23 @@ fn generate_vertices(
 }
 
 impl Fitness {
-    fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::PoseBonus]) -> Self {
+    fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::ProblemBonus]) -> Self {
+
+        let maybe_pose_bonus = match bonuses.get(0) {
+            None =>
+                None,
+            Some(problem::ProblemBonus { bonus: problem::ProblemBonusType::BreakALeg, .. }) =>
+                todo!(),
+            Some(&problem::ProblemBonus { bonus: problem::ProblemBonusType::Globalist, problem, .. }) =>
+                Some(problem::PoseBonus::Globalist { problem, }),
+            Some(&problem::ProblemBonus { bonus: problem::ProblemBonusType::Wallhack, problem, .. }) =>
+                Some(problem::PoseBonus::Wallhack { problem, }),
+            Some(&problem::ProblemBonus { bonus: problem::ProblemBonusType::Superflex, problem, .. }) =>
+                Some(problem::PoseBonus::Superflex { problem, }),
+        };
+
         let mut is_ok = true;
-        let ratio_sum = match problem.score_vertices_check_stretching(vertices, bonuses.get(0).cloned()) {
+        let ratio_sum = match problem.score_vertices_check_stretching(vertices, maybe_pose_bonus) {
             Ok(ratio_sum) =>
                 ratio_sum,
             Err(problem::PoseValidationError::BrokenEdgesFound { ratio_sum, .. }) => {
@@ -254,7 +267,7 @@ impl Fitness {
 
         let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
         if is_ok {
-            match problem.score_vertices(vertices, bonuses.get(0).cloned()) {
+            match problem.score_vertices(vertices, maybe_pose_bonus) {
                 Ok(score) =>
                     Fitness::FigureScored { score, },
                 Err(problem::PoseValidationError::VerticeCountMismatch) =>

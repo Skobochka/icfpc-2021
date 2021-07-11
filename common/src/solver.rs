@@ -19,7 +19,7 @@ pub struct Solver {
     problem: problem::Problem,
     pose: problem::Pose,
     pose_score: i64,
-    provide_bonuses: Vec<problem::PoseBonus>,
+    unlocked_bonuses: Vec<problem::ProblemBonus>,
 }
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl Solver {
     pub fn with_bonuses(
         problem: &problem::Problem,
         pose: Option<problem::Pose>,
-        provide_bonuses: Vec<problem::PoseBonus>,
+        unlocked_bonuses: Vec<problem::ProblemBonus>,
     )
         -> Result<Solver, CreateError>
     {
@@ -94,7 +94,7 @@ impl Solver {
         let pose = match pose {
             None => problem::Pose {
                 vertices: problem.figure.vertices.clone(),
-                bonuses: if provide_bonuses.is_empty() { None } else { Some(provide_bonuses.clone()) },
+                bonuses: None,
             },
             Some(pose) => pose,
         };
@@ -113,7 +113,7 @@ impl Solver {
             problem: problem.clone(),
             pose,
             pose_score,
-            provide_bonuses,
+            unlocked_bonuses,
         })
     }
 
@@ -131,7 +131,6 @@ pub fn is_edge_ratio_valid(
     edge: &problem::Edge,
     vertices: &[problem::Point],
     problem: &problem::Problem,
-    _bonuses: &[problem::PoseBonus],
 )
     -> (bool, f64)
 {

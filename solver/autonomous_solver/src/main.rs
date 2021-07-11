@@ -83,18 +83,20 @@ fn main() -> Result<(), Error> {
     log::info!("program starts as: {:?}", cli_args);
 
     loop {
-        let mut problems = sync_problems_directory(&cli_args)?;
-        problems.shuffle(&mut rand::thread_rng());
+        let mut available_problems = sync_problems_directory(&cli_args)?;
+        available_problems.problems.shuffle(&mut rand::thread_rng());
+
+        gather_unlocked_bonuses(&mut available_problems.problems)?;
 
         let (slaves_tx, slaves_rx) = mpsc::channel();
         let mut current_workers_count = 0;
         let mut tasks_done = 0;
 
         loop {
-            if current_workers_count == 0 && problems.is_empty() {
+            if current_workers_count == 0 && available_problems.problems.is_empty() {
                 break;
             }
-            if current_workers_count >= cli_args.worker_slaves_count || problems.is_empty() {
+            if current_workers_count >= cli_args.worker_slaves_count || available_problems.problems.is_empty() {
                 let task_id = slaves_rx.recv().unwrap()?;
                 log::info!("slave done with task = {}", task_id);
                 current_workers_count -= 1;
@@ -102,7 +104,7 @@ fn main() -> Result<(), Error> {
                 continue;
             }
 
-            let problem = problems.pop().unwrap();
+            let problem = available_problems.problems.pop().unwrap();
             let slaves_tx = slaves_tx.clone();
             let cli_args = cli_args.clone();
             thread::Builder::new()
@@ -123,6 +125,11 @@ struct ProblemDesc {
     problem_file: PathBuf,
     pose_file: PathBuf,
     task_id: String,
+    unlocked_bonuses: Vec<problem::ProblemBonus>,
+}
+
+struct AvailableProblems {
+    problems: Vec<ProblemDesc>,
 }
 
 fn slave_run(slaves_tx: mpsc::Sender<Result<String, Error>>, problem: ProblemDesc, cli_args: CliArgs) {
@@ -178,7 +185,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     };
 
     let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-        solver::Solver::new(&problem, maybe_pose)
+        solver::Solver::with_bonuses(&problem, maybe_pose, problem_desc.unlocked_bonuses.clone())
             .map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,
@@ -270,7 +277,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     Ok(())
 }
 
-fn sync_problems_directory(cli_args: &CliArgs) -> Result<Vec<ProblemDesc>, Error> {
+fn sync_problems_directory(cli_args: &CliArgs) -> Result<AvailableProblems, Error> {
     let mut problems = Vec::new();
 
     let dir_entries = fs::read_dir(&cli_args.problems_directory)
@@ -287,11 +294,11 @@ fn sync_problems_directory(cli_args: &CliArgs) -> Result<Vec<ProblemDesc>, Error
                         if let None = split_iter.next() {
                             let mut pose_file = cli_args.poses_directory.clone();
                             pose_file.push(format!("{}.pose", task_id));
-
                             problems.push(ProblemDesc {
                                 task_id: task_id.to_string(),
                                 problem_file: problem_path,
                                 pose_file,
+                                unlocked_bonuses: vec![],
                             });
                         }
                     }
@@ -299,5 +306,41 @@ fn sync_problems_directory(cli_args: &CliArgs) -> Result<Vec<ProblemDesc>, Error
             }
         }
     }
-    Ok(problems)
+
+    Ok(AvailableProblems { problems, })
+}
+
+fn gather_unlocked_bonuses(problems: &mut [ProblemDesc]) -> Result<(), Error> {
+    for problem_index in 0 .. problems.len() {
+        let problem_desc = &problems[problem_index];
+
+        let problem = problem::Problem::from_file(&problem_desc.problem_file)
+            .map_err(Error::ProblemLoad)?;
+        let available_bonuses = if let Some(bonuses) = problem.bonuses {
+            bonuses
+        } else {
+            continue;
+        };
+
+        let pose = match problem::Pose::from_file(&problem_desc.pose_file) {
+            Ok(pose) =>
+                pose,
+            Err(problem::FromFileError::OpenFile(error)) if error.kind() == io::ErrorKind::NotFound =>
+                continue,
+            Err(error) =>
+                return Err(Error::PoseLoad(error)),
+        };
+
+        for bonus in available_bonuses {
+            if pose.vertices.iter().find(|v| v == &&bonus.position).is_some() {
+                let target_task_id = format!("{}", bonus.problem.0);
+                if let Some(target_problem) = problems.iter_mut().find(|p| p.task_id == target_task_id) {
+                    log::debug!("unlocked {:?} for task {}", bonus, target_task_id);
+                    target_problem.unlocked_bonuses.push(bonus);
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
