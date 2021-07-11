@@ -62,33 +62,32 @@ impl BruteforceHoleSolver {
 
             match bonus {
                 Some(problem::PoseBonus::Globalist {..}) => {
-                    let mut distance_before = 0;
-                    let mut distance_after = 0;
+                    let mut eps = 0_f64;
                     for idx in 0..vert_idx {
-                        let edge_distance = distances[vert_idx*vertices.len()+idx];
-                        if edge_distance == -1 {
+                        let d_before = distances[vert_idx*vertices.len()+idx];
+                        if d_before == -1 {
                             continue;
                         }
-                        distance_before += edge_distance;
-                        distance_after += problem::distance(&hole_vertice, &vertices[idx]);
+                        let d_after = problem::distance(&hole_vertice, &vertices[idx]);
+                        eps += ((d_after as f64 / d_before as f64) - 1_f64).abs();
                     }
-                    if ((distance_after as f64 / distance_before as f64) - 1_f64).abs() > self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64 / 1000000_f64 {
+                    let max_eps = self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64 / 1000000_f64 ;
+                    if eps > max_eps{
                         // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
                         if vert_idx == 0 {
-                            println!("skipped {}...", progress);
+                            println!("skipped {}..., eps: {}, max_eps: {}", progress, eps, max_eps);
                             progress += 1;
                         }
                         if vert_idx == 1 {
-                            println!(" + skipped {}...", progress);
+                            println!(" + skipped {}..., eps: {}, max_eps: {}", progress, eps, max_eps);
                             progress += 1;
                         }
-                        if vert_idx == 3 {
-                            println!("  ++  skipped {}...", progress);
+                        if vert_idx == 2 {
+                            println!("  ++  skipped {}..., eps: {}, max_eps: {}", progress, eps, max_eps);
                             progress += 1;
                         }
                         continue 'next_hole_vertice;
                     }
-
                 },
                 _ => {
                     let mut superstretch_allow = match bonus {
@@ -131,6 +130,7 @@ impl BruteforceHoleSolver {
 
             vertices[vert_idx] = *hole_vertice;
             let (new_score, new_pose) = if vert_idx == vertices.len() - 1 {
+                println!("NOT SKIPPED");
                 // self.track_progress(1);
                 // self.track_progress(vert_idx, hole_idx);
                 match self.solver.problem.score_vertices(vertices, bonus) {
