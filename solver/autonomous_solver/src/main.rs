@@ -67,7 +67,7 @@ pub enum Error {
     FsDirEntry { directory: PathBuf, error: io::Error, },
     ProblemLoad(problem::FromFileError),
     PoseLoad(problem::FromFileError),
-    LoadPoseInvalidContent(problem::PoseValidationError),
+    LoadPoseInvalidContent { pose_file: PathBuf, error: problem::PoseValidationError, },
     SolverCreate(solver::CreateError),
     PoseExport(problem::WriteFileError),
     PoseSerialize(serde_json::Error),
@@ -165,7 +165,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                 Ok(score) =>
                     Some((pose, score)),
                 Err(error) =>
-                    return Err(Error::LoadPoseInvalidContent(error)),
+                    return Err(Error::LoadPoseInvalidContent { pose_file: problem_desc.pose_file.clone(), error, }),
             }
         },
         Err(problem::FromFileError::OpenFile(error)) if error.kind() == io::ErrorKind::NotFound =>

@@ -282,7 +282,7 @@ impl Problem {
 
 
     pub fn score_pose(&self, pose: &Pose) -> Result<i64, PoseValidationError> {
-        self.score_vertices(&pose.vertices, None)
+        self.score_vertices(&pose.vertices, pose.bonuses.as_ref().and_then(|bonuses| bonuses.first().cloned()))
     }
 
     pub fn possible_rotations(&self) -> Vec<f64> {
