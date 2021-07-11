@@ -322,15 +322,15 @@ fn slave_run_task_with(
             Err(solver::simulated_annealing::StepError::TempTooLow) => {
                 log::debug!("annealing done for task {}", problem_desc.task_id);
                 break;
-            }
+            },
             Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInVertexIndex) => {
                 log::error!("probably infinite loop in vertex index for task {}, stopping", problem_desc.task_id);
                 break;
-            }
+            },
             Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInMovedVertex) => {
                 log::error!("probably infinite loop in moved vertex for task {}, stopping", problem_desc.task_id);
                 break;
-            }
+            },
         }
         match solver.fitness() {
             solver::simulated_annealing::Fitness::FigureScored { score, } =>

@@ -112,7 +112,15 @@ fn main() -> Result<(), Error> {
             Err(solver::simulated_annealing::StepError::TempTooLow) => {
                 log::info!("annealing done");
                 return Ok(());
-            }
+            },
+            Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInVertexIndex) => {
+                log::error!("probably infinite loop in vertex index stopping");
+                return Ok(());
+            },
+            Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInMovedVertex) => {
+                log::error!("probably infinite loop in moved vertex stopping");
+                return Ok(());
+            },
         }
         match solver.fitness() {
             solver::simulated_annealing::Fitness::FigureScored { score, } =>
