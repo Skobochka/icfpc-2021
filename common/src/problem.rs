@@ -219,10 +219,10 @@ impl Problem {
                                      bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
         let geo_hole = self.hole_polygon_f64();
         let mut edges_out_of_hole = Vec::new();
-        let mut outer_vertex: Option<geo::Coordinate<f64>> = None;
+        let mut outer_vertex: Option<usize> = None;
         for &Edge(from_idx, to_idx) in &self.figure.edges {
             let geo_start = geo::Coordinate::from(pose_vertices[from_idx]);
-            let geo_end = geo::Coordinate::from(pose_vertices[from_idx]);
+            let geo_end = geo::Coordinate::from(pose_vertices[to_idx]);
             let geo_edge = geo::Line {
                 start: geo_start,
                 end: geo_end,
@@ -238,16 +238,16 @@ impl Problem {
                             let contains_start = geo_hole.contains(&geo_start);
                             let contains_end = geo_hole.contains(&geo_end);
                             if !contains_start && contains_end {
-                                outer_vertex = Some(geo_start);
+                                outer_vertex = Some(from_idx);
                                 continue; // Ok, that's edge belongs to outer-point
                             }
                             else if contains_start && !contains_end {
-                                outer_vertex = Some(geo_end);
+                                outer_vertex = Some(to_idx);
                                 continue; // Ok, that's edge belongs to outer-point
                             }
                         },
-                        Some(point) => {
-                            if (point == geo_start) || (point == geo_end) {
+                        Some(idx) => {
+                            if (idx == from_idx) || (idx == to_idx) {
                                 continue; // Ok, that's edge belongs to outer-point
                             }
                         },
