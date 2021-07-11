@@ -15,6 +15,8 @@ use structopt::{
     StructOpt,
 };
 
+use rand::prelude::SliceRandom;
+
 use common::{
     problem,
     solver,
@@ -78,6 +80,7 @@ fn main() -> Result<(), Error> {
 
     loop {
         let mut problems = sync_problems_directory(&cli_args)?;
+        problems.shuffle(&mut rand::thread_rng());
 
         let (slaves_tx, slaves_rx) = mpsc::channel();
         let mut current_workers_count = 0;
