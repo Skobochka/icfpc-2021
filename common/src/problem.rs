@@ -205,18 +205,44 @@ impl Problem {
 
     pub fn score_vertices_check_hole(&self,
                                      pose_vertices: &[Point],
-                                     _bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
+                                     bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
         let geo_hole = self.hole_polygon_f64();
         let mut edges_out_of_hole = Vec::new();
+        let mut outer_vertex: Option<geo::Coordinate<f64>> = None;
         for &Edge(from_idx, to_idx) in &self.figure.edges {
+            let geo_start = geo::Coordinate::from(pose_vertices[from_idx]);
+            let geo_end = geo::Coordinate::from(pose_vertices[from_idx]);
             let geo_edge = geo::Line {
-                start: geo::Coordinate::from(pose_vertices[from_idx]),
-                end: geo::Coordinate::from(pose_vertices[to_idx])
+                start: geo_start,
+                end: geo_end,
             };
             if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
                 // ok
             }
             else {
+                if let Some(PoseBonus::Wallhack { .. }) = bonus {
+                    /* probably we can allow that for one vertice */
+                    match outer_vertex {
+                        None => {
+                            let contains_start = geo_hole.contains(&geo_start);
+                            let contains_end = geo_hole.contains(&geo_end);
+                            if !contains_start && contains_end {
+                                outer_vertex = Some(geo_start);
+                                continue; // Ok, that's edge belongs to outer-point
+                            }
+                            else if contains_start && !contains_end {
+                                outer_vertex = Some(geo_end);
+                                continue; // Ok, that's edge belongs to outer-point
+                            }
+                        },
+                        Some(point) => {
+                            if (point == geo_start) || (point == geo_end) {
+                                continue; // Ok, that's edge belongs to outer-point
+                            }
+                        },
+                    };
+                }
+
                 edges_out_of_hole.push(Edge(from_idx, to_idx));
             }
         }
