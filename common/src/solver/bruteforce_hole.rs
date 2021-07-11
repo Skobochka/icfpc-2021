@@ -2,6 +2,11 @@
 //     path::PathBuf,
 // };
 
+use std::{
+    collections::HashSet,
+    iter::FromIterator,
+};
+
 use crate::{
     solver,
     problem,
@@ -19,9 +24,9 @@ impl BruteforceHoleSolver {
         }
     }
 
-    pub fn solve(&mut self) -> Option<problem::Pose> {
+    pub fn solve(&self) -> Option<problem::Pose> {
         let mut vertices = self.solver.problem.figure.vertices.clone();
-        let hole = self.solver.problem.hole.clone();
+        let hole = HashSet::from_iter(self.solver.problem.hole.iter().cloned());
         let mut distances = vec![-1; vertices.len() * vertices.len()];
 
         for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
@@ -37,7 +42,8 @@ impl BruteforceHoleSolver {
             }
             _ => {},
         };
-        let (score, pose) = self.run(0, i64::MAX, &mut vertices, &hole, &distances, self.solver.pose.bonus());
+
+        let (score, pose) = self.run(0, i64::MAX, &mut vertices, hole, &distances, self.solver.pose.bonus());
         match pose {
             None => println!("Solution not found..."),
             Some(ref pose) => println!("Found solution with score {:?}: {:?}", score, pose),
@@ -45,17 +51,16 @@ impl BruteforceHoleSolver {
         pose
     }
 
-    fn run(&mut self, vert_idx: usize,
+    fn run(&self, vert_idx: usize,
            last_best_score: i64,
            vertices: &mut Vec<problem::Point>,
-           hole: &Vec<problem::Point>,
+           hole: HashSet<problem::Point>,
            distances: &[i64],
            bonus: Option<problem::PoseBonus>) -> (i64, Option<problem::Pose>) {
-
         let mut best_pose_score = last_best_score;
         let mut best_pose = None;
         let mut progress = 1;
-        'next_hole_vertice: for hole_vertice in hole {
+        'next_hole_vertice: for hole_vertice in &hole {
             if vert_idx == 0 {
                 println!("Starting {} of {}...", progress, hole.len());
             }
@@ -66,31 +71,25 @@ impl BruteforceHoleSolver {
                 println!("  ++  Starting {} of {}...", progress, hole.len());
             }
 
+            /* We have points left, applying */
             match bonus {
                 Some(problem::PoseBonus::Globalist {..}) => {
                     let mut eps = 0_f64;
-                    for idx in 0..vert_idx {
-                        for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
-                            if from_idx != vert_idx {
-                                continue;
-                            }
-                            if to_idx > vert_idx {
-                                continue;
-                            }
-
-                            let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
-                            let d_after = problem::distance(&hole_vertice, &vertices[idx]);
-                            eps += ((d_after as f64 / d_before as f64) - 1_f64).abs();
+                    for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
+                        if from_idx != vert_idx {
+                            continue;
+                        }
+                        if to_idx >= vert_idx {
+                            continue;
                         }
 
-                        // //let d_before = distances[vert_idx*vertices.len()+idx];
-                        // if d_before == -1 {
-                        //     continue;
-                        // }
+                        let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
+                        let d_after = problem::distance(&hole_vertice, &vertices[to_idx]);
+                        eps += ((d_after as f64 / d_before as f64) - 1_f64).abs();
                     }
+
                     let max_eps = self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64 / 1000000_f64 ;
                     if eps > max_eps{
-                        // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
                         if vert_idx == 0 {
                             println!("skipped {}..., eps: {}, max_eps: {}, orig_eps: {}", progress, eps, max_eps, self.solver.problem.epsilon as f64 / 1000000_f64);
                             progress += 1;
@@ -111,39 +110,37 @@ impl BruteforceHoleSolver {
                         Some(problem::PoseBonus::Superflex {..}) => 1,
                         _ => 0,
                     };
-                    for idx in 0..vert_idx {
-                        for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
-                            if from_idx != vert_idx {
+                    for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
+                        if from_idx != vert_idx {
+                            continue;
+                        }
+                        if to_idx >= vert_idx {
+                            continue;
+                        }
+
+                        let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
+                        let d_after = problem::distance(&hole_vertice, &vertices[to_idx]);
+
+                        if ((d_after as f64 / d_before as f64) - 1_f64).abs() > self.solver.problem.epsilon as f64 / 1000000_f64 {
+                            if superstretch_allow > 0 {
+                                superstretch_allow = 0;
                                 continue;
                             }
-                            if to_idx > vert_idx {
-                                continue;
+
+                            // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
+                            if vert_idx == 0 {
+                                println!("skipped {}...", progress);
+                                progress += 1;
                             }
-
-                            let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
-                            let d_after = problem::distance(&hole_vertice, &vertices[idx]);
-
-                            if ((d_after as f64 / d_before as f64) - 1_f64).abs() > self.solver.problem.epsilon as f64 / 1000000_f64 {
-                                if superstretch_allow > 0 {
-                                    superstretch_allow = 0;
-                                    continue;
-                                }
-
-                                // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
-                                if vert_idx == 0 {
-                                    println!("skipped {}...", progress);
-                                    progress += 1;
-                                }
-                                if vert_idx == 1 {
-                                    println!(" + skipped {}...", progress);
-                                    progress += 1;
-                                }
-                                if vert_idx == 3 {
-                                    println!("  ++  skipped {}...", progress);
-                                    progress += 1;
-                                }
-                                continue 'next_hole_vertice;
+                            if vert_idx == 1 {
+                                println!(" + skipped {}...", progress);
+                                progress += 1;
                             }
+                            if vert_idx == 3 {
+                                println!("  ++  skipped {}...", progress);
+                                progress += 1;
+                            }
+                            continue 'next_hole_vertice;
                         }
                     }
                 }
@@ -151,17 +148,19 @@ impl BruteforceHoleSolver {
 
             vertices[vert_idx] = *hole_vertice;
             let (new_score, new_pose) = if vert_idx == vertices.len() - 1 {
-                // println!("NOT SKIPPED");
                 match self.solver.problem.score_vertices(vertices, bonus) {
                     Ok(score) => (score, Some(problem::Pose {
                         vertices: vertices.clone(),
                         bonuses: bonus.map(|b| vec![b]),
                     })),
-                    _ => (i64::MAX, None),
+                    Err(_) => (i64::MAX, None),
+                    // Err(e) => {println!("Got error {:?}", e); (i64::MAX, None)},
                 }
             }
             else {
-                self.run(vert_idx + 1, best_pose_score, vertices, hole, distances, bonus)
+                let mut new_hole = hole.clone();
+                new_hole.remove(hole_vertice);
+                self.run(vert_idx + 1, best_pose_score, vertices, new_hole, distances, bonus)
             };
 
             if new_score == 0 {
@@ -188,7 +187,178 @@ impl BruteforceHoleSolver {
                 println!("  ++  DONE {} of {}...", progress, hole.len());
                 progress += 1;
             }
+
         }
+
+        if hole.is_empty() {
+            // println!("Hole bruteforce reached its end. We have {} vertices left: {:?}",
+            //          vertices.len() - vert_idx, &vertices[vert_idx..]);
+
+            // println!("Running plain bruteforce to complete the task");
+            return self.run_plain_bruteforce(self.solver.field_min, vert_idx, best_pose_score,
+                                             vertices, distances, bonus);
+        }
+
         (best_pose_score, best_pose)
+    }
+
+    fn run_plain_bruteforce(&self,
+                            start: problem::Point, vert_idx: usize, last_best: i64,
+                            vertices: &mut Vec<problem::Point>,
+                            distances: &[i64],
+                            bonus: Option<problem::PoseBonus>) -> (i64, Option<problem::Pose>) {
+
+        let mut new_pose = None;
+        let mut best_score = last_best;
+        let mut next_y = start.1;
+        let mut next_x = start.0;
+        while next_y <= self.solver.field_max.1 {
+            if vert_idx < 2 {
+                // log::debug!("Starting Y-step {} for idx: {}...", next_y, vert_idx);
+            }
+            'loop_x: while next_x <= self.solver.field_max.0 {
+
+                if vert_idx < 2 {
+                    // log::debug!("Starting X-step {} for idx: {}...", next_x, vert_idx);
+                }
+                if next_y > self.solver.field_max.1 {
+                    break;
+                }
+
+                let vertice = problem::Point(next_x, next_y);
+                // log::debug!("checking {} vertice: {:?}, vertices: {:?}, is_hole: {}", vert_idx, vertice, vertices, self.solver.is_hole(&vertice));
+
+                next_x += 1;
+                if next_x > self.solver.field_max.0 {
+                    next_x = 0;
+                    next_y += 1;
+                }
+
+                // match bonus {
+                //     Some(problem::PoseBonus::Wallhack {..}) => 1,
+                //     _ => 0,
+                // }
+                if !self.solver.is_hole(&vertice) {
+                    continue;
+                }
+
+                match bonus {
+                    Some(problem::PoseBonus::Globalist {..}) => {
+                        let mut eps = 0_f64;
+                        for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
+                            if from_idx != vert_idx {
+                                continue;
+                            }
+                            if to_idx >= vert_idx {
+                                continue;
+                            }
+
+                            let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
+                            let d_after = problem::distance(&vertice, &vertices[to_idx]);
+                            eps += ((d_after as f64 / d_before as f64) - 1_f64).abs();
+                        }
+
+                        let max_eps = self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64 / 1000000_f64 ;
+                        if eps > max_eps{
+                            // if vert_idx == 0 {
+                            //     println!("skipped {}..., eps: {}, max_eps: {}, orig_eps: {}", progress, eps, max_eps, self.solver.problem.epsilon as f64 / 1000000_f64);
+                            //     progress += 1;
+                            // }
+                            // if vert_idx == 1 {
+                            //     println!(" + skipped {}..., eps: {}, max_eps: {}, orig_eps: {}", progress, eps, max_eps, self.solver.problem.epsilon as f64 / 1000000_f64);
+                            //     progress += 1;
+                            // }
+                            // if vert_idx == 2 {
+                            //     println!("  ++  skipped {}..., eps: {}, max_eps: {}", progress, eps, max_eps);
+                            //     progress += 1;
+                            // }
+                            continue 'loop_x;
+                        }
+                    },
+                    _ => {
+                        let mut superstretch_allow = match bonus {
+                            Some(problem::PoseBonus::Superflex {..}) => 1,
+                            _ => 0,
+                        };
+                        for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
+                            if from_idx != vert_idx {
+                                continue;
+                            }
+                            if to_idx >= vert_idx {
+                                continue;
+                            }
+
+                            let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
+                            let d_after = problem::distance(&vertice, &vertices[to_idx]);
+
+                            if ((d_after as f64 / d_before as f64) - 1_f64).abs() > self.solver.problem.epsilon as f64 / 1000000_f64 {
+                                if superstretch_allow > 0 {
+                                    superstretch_allow = 0;
+                                    continue;
+                                }
+
+                                // self.track_progress((hole.len() as u128).pow((vertices.len() - vert_idx) as u32));
+                                // if vert_idx == 0 {
+                                //     println!("skipped {}...", progress);
+                                //     progress += 1;
+                                // }
+                                // if vert_idx == 1 {
+                                //     println!(" + skipped {}...", progress);
+                                //     progress += 1;
+                                // }
+                                // if vert_idx == 3 {
+                                //     println!("  ++  skipped {}...", progress);
+                                //     progress += 1;
+                                // }
+                                continue 'loop_x;
+                            }
+                        }
+                    }
+                }
+
+                vertices[vert_idx] = vertice;
+
+                if vert_idx == vertices.len() - 1 {
+                    // log::debug!("scoring candidate... {:?}", vertices);
+
+                    match self.solver.problem.score_vertices(vertices, bonus) {
+                        Ok(score) => {
+                            // log::debug!("Found solution with score {:?}: {:?}", score, vertices);
+                            if score == 0 { // perfect solution found
+                                return (0, Some(problem::Pose {
+                                    vertices: vertices.clone(),
+                                    bonuses: bonus.map(|b| vec![b]),
+                                }))
+                            }
+                            if score < best_score {
+                                best_score = score;
+                                new_pose = Some(problem::Pose {
+                                    vertices: vertices.clone(),
+                                    bonuses: bonus.map(|b| vec![b]),
+                                })
+                            }
+                        },
+                        _ => continue,
+                    }
+                }
+                else {
+                    let (rec_best_score, rec_new_pose) = self.run_plain_bruteforce(self.solver.field_min, vert_idx + 1, best_score, vertices,
+                                                                                   distances, bonus);
+                    if rec_best_score == 0 {
+                        return (0, rec_new_pose);
+                    }
+                    if rec_best_score < best_score {
+                        best_score = rec_best_score;
+                        new_pose = rec_new_pose;
+                    }
+                }
+            }
+            if vert_idx < 2 {
+                // log::debug!("Passed Y-step {} for idx: {}", next_y, vert_idx);
+            }
+
+        }
+
+        (best_score, new_pose)
     }
 }
