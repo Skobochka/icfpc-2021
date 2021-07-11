@@ -31,6 +31,12 @@ impl BruteforceHoleSolver {
         }
 
         println!("Bruteforce of hole size {} for figure size {} with bonus {:?}...", hole.len(), vertices.len(), self.solver.pose.bonus());
+        match self.solver.pose.bonus() {
+            Some(problem::PoseBonus::Globalist {..}) => {
+                println!("GLOBALIST bonus detected. Max ratio is: {}", (self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64) / 1000000_f64);
+            }
+            _ => {},
+        };
         let (score, pose) = self.run(0, i64::MAX, &mut vertices, &hole, &distances, self.solver.pose.bonus());
         match pose {
             None => println!("Solution not found..."),
