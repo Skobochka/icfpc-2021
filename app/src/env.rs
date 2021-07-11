@@ -339,7 +339,9 @@ impl Env {
                         problem::ProblemBonusType::Globalist =>
                             "globalist".to_string(),
                         problem::ProblemBonusType::Wallhack =>
-                            "globalist".to_string(),
+                            "wallhack".to_string(),
+                        problem::ProblemBonusType::Superflex =>
+                            "superflex".to_string(),
                     },
                     x: bonus.position.0 as f64,
                     y: bonus.position.1 as f64,
