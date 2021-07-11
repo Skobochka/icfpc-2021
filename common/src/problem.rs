@@ -64,6 +64,8 @@ pub enum ProblemBonusType {
     Globalist,
     #[serde(rename = "WALLHACK")]
     Wallhack,
+    #[serde(rename = "SUPERFLEX")]
+    Superflex,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -83,6 +85,10 @@ pub enum PoseBonus {
     },
     #[serde(rename = "WALLHACK")]
     Wallhack {
+        problem: ProblemId,
+    },
+    #[serde(rename = "SUPERFLEX")]
+    Superflex {
         problem: ProblemId,
     },
 }
