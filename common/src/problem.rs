@@ -145,9 +145,13 @@ impl Problem {
 
     pub fn score_vertices_check_count(&self,
                                       pose_vertices: &[Point],
-                                      _bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
+                                      bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
         // Check (a): connectivity. As our app does not change include edges in Pose,
         // we just check that the new Pose inclues the same number of vertices as the original
+        if let Some(PoseBonus::BreakALeg { .. }) = bonus {
+            unimplemented!("BREAK_A_LEG is not supported yet");
+        }
+
         if self.figure.vertices.len() != pose_vertices.len() {
             return Err(PoseValidationError::VerticeCountMismatch)
         }
@@ -156,38 +160,89 @@ impl Problem {
 
     pub fn score_vertices_check_stretching(&self,
                                            pose_vertices: &[Point],
-                                           _bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
-        // Check stretching
-        let mut broken_edges = Vec::new();
-        for &Edge(from_idx, to_idx) in &self.figure.edges {
-            let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
-            let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
-            if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
-                // log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
-                broken_edges.push(Edge(from_idx, to_idx));
+                                           bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
+        match bonus {
+            Some(PoseBonus::Globalist { .. }) => {
+                // Check stretching
+                let mut d_before = 0_i64;
+                let mut d_after = 0_i64;
+
+                for &Edge(from_idx, to_idx) in &self.figure.edges {
+                    d_before += distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
+                    d_after += distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
+
+                }
+
+                if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > (self.figure.edges.len() as f64 * self.epsilon as f64) / 1000000_f64 {
+                     return Err(PoseValidationError::BrokenEdgesFound(vec![]));
+                }
+
+                Ok(())
+            }
+            Some(PoseBonus::BreakALeg { .. }) => {
+                unimplemented!("BREAK_A_LEG is not supported yet");
+            }
+            _ => {
+                // Check stretching
+                let mut broken_edges = Vec::new();
+                for &Edge(from_idx, to_idx) in &self.figure.edges {
+                    let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
+                    let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
+
+                    if ((d_after as f64) / (d_before as f64) - 1_f64).abs() > self.epsilon as f64 / 1000000_f64 {
+                        // log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
+                        broken_edges.push(Edge(from_idx, to_idx));
+                    }
+                }
+                if !broken_edges.is_empty() {
+                    return Err(PoseValidationError::BrokenEdgesFound(broken_edges));
+                }
+
+                Ok(())
             }
         }
-        if !broken_edges.is_empty() {
-            return Err(PoseValidationError::BrokenEdgesFound(broken_edges));
-        }
-
-        Ok(())
     }
 
     pub fn score_vertices_check_hole(&self,
                                      pose_vertices: &[Point],
-                                     _bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
+                                     bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
         let geo_hole = self.hole_polygon_f64();
         let mut edges_out_of_hole = Vec::new();
+        let mut outer_vertex: Option<geo::Coordinate<f64>> = None;
         for &Edge(from_idx, to_idx) in &self.figure.edges {
+            let geo_start = geo::Coordinate::from(pose_vertices[from_idx]);
+            let geo_end = geo::Coordinate::from(pose_vertices[from_idx]);
             let geo_edge = geo::Line {
-                start: geo::Coordinate::from(pose_vertices[from_idx]),
-                end: geo::Coordinate::from(pose_vertices[to_idx])
+                start: geo_start,
+                end: geo_end,
             };
             if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
                 // ok
             }
             else {
+                if let Some(PoseBonus::Wallhack { .. }) = bonus {
+                    /* probably we can allow that for one vertice */
+                    match outer_vertex {
+                        None => {
+                            let contains_start = geo_hole.contains(&geo_start);
+                            let contains_end = geo_hole.contains(&geo_end);
+                            if !contains_start && contains_end {
+                                outer_vertex = Some(geo_start);
+                                continue; // Ok, that's edge belongs to outer-point
+                            }
+                            else if contains_start && !contains_end {
+                                outer_vertex = Some(geo_end);
+                                continue; // Ok, that's edge belongs to outer-point
+                            }
+                        },
+                        Some(point) => {
+                            if (point == geo_start) || (point == geo_end) {
+                                continue; // Ok, that's edge belongs to outer-point
+                            }
+                        },
+                    };
+                }
+
                 edges_out_of_hole.push(Edge(from_idx, to_idx));
             }
         }
