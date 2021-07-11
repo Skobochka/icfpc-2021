@@ -807,7 +807,7 @@ impl Env {
     }
 
     pub fn rescore_solution(&mut self) {
-        let score = self.initial_problem.score_vertices(&self.problem.figure.vertices);
+        let score = self.initial_problem.score_vertices(&self.problem.figure.vertices, None);
         self.update_score_state(score);
     }
 
