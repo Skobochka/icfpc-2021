@@ -197,7 +197,7 @@ impl Fitness {
         }
         let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
         if is_ok {
-            match problem.score_vertices(vertices) {
+            match problem.score_vertices(vertices, &None) {
                 Ok(score) =>
                     Fitness::FigureScored { score, },
                 Err(problem::PoseValidationError::VerticeCountMismatch) =>
