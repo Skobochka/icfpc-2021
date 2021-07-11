@@ -142,7 +142,15 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         .map_err(Error::ProblemLoad)?;
 
     let maybe_pose_score = match problem::Pose::from_file(&problem_desc.pose_file) {
-        Ok(pose) =>
+        Ok(pose) => {
+            match pose.bonuses {
+                Some(bonuses) if !bonuses.is_empty() => {
+                    log::info!("skipping task {} because of bonuses unlocked", problem_desc.task_id);
+                    return Ok(());
+                }
+                Some(..) | None =>
+                    (),
+            }
             match problem.score_pose(&pose) {
                 Ok(0) => {
                     log::info!("skipping task {} because of zero score", problem_desc.task_id);
@@ -152,7 +160,8 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                     Some((pose, score)),
                 Err(error) =>
                     return Err(Error::LoadPoseInvalidContent(error)),
-            },
+            }
+        },
         Err(problem::FromFileError::OpenFile(error)) if error.kind() == io::ErrorKind::NotFound =>
             None,
         Err(error) =>
