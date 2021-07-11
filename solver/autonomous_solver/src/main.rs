@@ -123,7 +123,7 @@ struct ProblemDesc {
     problem_file: PathBuf,
     pose_file: PathBuf,
     task_id: String,
-    unlocked_bonuses: Vec<problem::ProblemBonusType>,
+    unlocked_bonuses: Vec<(problem::ProblemBonusType, problem::ProblemId)>,
 }
 
 struct AvailableProblems {
@@ -186,7 +186,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     let allowed_unlocked_bonuses: Vec<_> = problem_desc
         .unlocked_bonuses
         .iter()
-        .filter(|unlocked_bonus| match unlocked_bonus {
+        .filter(|unlocked_bonus| match unlocked_bonus.0 {
             problem::ProblemBonusType::Globalist |
             problem::ProblemBonusType::Superflex |
             problem::ProblemBonusType::Wallhack =>
@@ -271,7 +271,7 @@ fn slave_run_task_with(
     maybe_pose: &Option<problem::Pose>,
     best_solution: &mut Option<i64>,
     cli_args: &CliArgs,
-    use_bonus: Option<problem::ProblemBonusType>,
+    use_bonus: Option<(problem::ProblemBonusType, problem::ProblemId)>,
     operating_mode: solver::simulated_annealing::OperatingMode,
 )
     -> Result<(), Error>
@@ -285,7 +285,7 @@ fn slave_run_task_with(
     );
 
     let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-        solver::Solver::with_bonus(problem, maybe_pose.as_ref().map(Clone::clone), use_bonus)
+        solver::Solver::with_bonus(problem, maybe_pose.as_ref().map(Clone::clone), use_bonus.map(|ub| ub.0))
             .map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,
@@ -338,7 +338,18 @@ fn slave_run_task_with(
                     *best_solution = Some(score);
                     let pose = problem::Pose {
                         vertices: solver.vertices().to_vec(),
-                        bonuses: None,
+                        bonuses: match use_bonus {
+                            None =>
+                                None,
+                            Some((problem::ProblemBonusType::BreakALeg, _source_problem)) =>
+                                unreachable!(),
+                            Some((problem::ProblemBonusType::Globalist, source_problem)) =>
+                                Some(vec![problem::PoseBonus::Globalist { problem: source_problem, }]),
+                            Some((problem::ProblemBonusType::Wallhack, source_problem)) =>
+                                Some(vec![problem::PoseBonus::Wallhack { problem: source_problem, }]),
+                            Some((problem::ProblemBonusType::Superflex, source_problem)) =>
+                                Some(vec![problem::PoseBonus::Superflex { problem: source_problem, }]),
+                        },
                     };
                     pose.write_to_file(&problem_desc.pose_file)
                         .map_err(Error::PoseExport)?;
@@ -444,7 +455,7 @@ fn gather_unlocked_bonuses(problems: &mut [ProblemDesc]) -> Result<(), Error> {
                 let target_task_id = format!("{}", bonus.problem.0);
                 if let Some(target_problem) = problems.iter_mut().find(|p| p.task_id == target_task_id) {
                     log::debug!("unlocked {:?} for task {}", bonus, target_task_id);
-                    target_problem.unlocked_bonuses.push(bonus.bonus);
+                    target_problem.unlocked_bonuses.push((bonus.bonus, problem::ProblemId(problem_index)));
                 }
             }
         }
