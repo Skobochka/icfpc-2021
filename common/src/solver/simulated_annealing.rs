@@ -103,11 +103,18 @@ impl SimulatedAnnealingSolver {
             let vertex_index = loop {
                 let edge_index = rng.gen_range(0 .. self.solver.problem.figure.edges.len());
                 let edge = &self.solver.problem.figure.edges[edge_index];
-                let (is_valid, _ratio) = solver::is_edge_ratio_valid(edge, &self.vertices_tmp, &self.solver.problem, &self.solver.provide_bonuses);
-                if is_valid {
-                    let accept_prob = rng.gen_range(0.0 .. 1.0);
-                    if accept_prob >= self.params.valid_edge_accept_prob {
-                        continue;
+                if self.solver.provide_bonuses.is_empty() {
+                    let (is_valid, _ratio) = solver::is_edge_ratio_valid(
+                        edge,
+                        &self.vertices_tmp,
+                        &self.solver.problem,
+                        &self.solver.provide_bonuses,
+                    );
+                    if is_valid {
+                        let accept_prob = rng.gen_range(0.0 .. 1.0);
+                        if accept_prob >= self.params.valid_edge_accept_prob {
+                            continue;
+                        }
                     }
                 }
                 let try_index = if rng.gen_range(0.0 .. 1.0) < 0.5 {
