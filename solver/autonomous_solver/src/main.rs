@@ -60,6 +60,8 @@ pub enum Error {
     FsReadDir { directory: PathBuf, error: io::Error, },
     FsDirEntry { directory: PathBuf, error: io::Error, },
     ProblemLoad(problem::FromFileError),
+    PoseLoad(problem::FromFileError),
+    LoadPoseInvalidContent(problem::PoseValidationError),
     SolverCreate(solver::CreateError),
     PoseExport(problem::WriteFileError),
     WorkerSpawn(io::Error),
@@ -75,6 +77,7 @@ fn main() -> Result<(), Error> {
 
         let (slaves_tx, slaves_rx) = mpsc::channel();
         let mut current_workers_count = 0;
+        let mut tasks_done = 0;
 
         loop {
             if current_workers_count == 0 && problems.is_empty() {
@@ -84,6 +87,7 @@ fn main() -> Result<(), Error> {
                 let task_id = slaves_rx.recv().unwrap()?;
                 log::info!("slave done with task = {}", task_id);
                 current_workers_count -= 1;
+                tasks_done += 1;
                 continue;
             }
 
@@ -94,7 +98,10 @@ fn main() -> Result<(), Error> {
                 .name(format!("autonomous_solver worker for {:?}", problem.task_id))
                 .spawn(move || slave_run(slaves_tx, problem, cli_args))
                 .map_err(Error::WorkerSpawn)?;
+            current_workers_count += 1;
         }
+
+        log::info!("directory processing finished, {} tasks done", tasks_done);
 
         return Ok(())
     }
@@ -118,9 +125,87 @@ fn slave_run(slaves_tx: mpsc::Sender<Result<String, Error>>, problem: ProblemDes
     ).ok();
 }
 
-fn slave_run_task(problem: &ProblemDesc, cli_args: &CliArgs) -> Result<(), Error> {
+fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), Error> {
 
-    todo!()
+    let problem = problem::Problem::from_file(&problem_desc.problem_file)
+        .map_err(Error::ProblemLoad)?;
+
+    let maybe_pose_score = match problem::Pose::from_file(&problem_desc.pose_file) {
+        Ok(pose) =>
+            match problem.score_pose(&pose) {
+                Ok(score) =>
+                    Some((pose, score)),
+                Err(error) =>
+                    return Err(Error::LoadPoseInvalidContent(error)),
+            },
+        Err(problem::FromFileError::OpenFile(error)) if error.kind() == io::ErrorKind::NotFound =>
+            None,
+        Err(error) =>
+            return Err(Error::PoseLoad(error)),
+    };
+
+    log::info!("slave started task {}, current pose score: {:?}", problem_desc.task_id, maybe_pose_score.as_ref().map(|ps| ps.1));
+
+    let (mut best_solution, maybe_pose) = match maybe_pose_score {
+        Some((pose, score)) =>
+            (Some(score), Some(pose)),
+        None =>
+            (None, None),
+    };
+
+    let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
+        solver::Solver::new(&problem, maybe_pose)
+            .map_err(Error::SolverCreate)?,
+        solver::simulated_annealing::Params {
+            max_temp: 100.0,
+            cooling_step_temp: cli_args.cooling_step_temp,
+            minimum_temp: 2.0,
+            valid_edge_accept_prob: cli_args.valid_edge_accept_prob,
+            iterations_per_cooling_step: cli_args.iterations_per_cooling_step,
+        },
+    );
+
+    let mut reheats_count = 0;
+    loop {
+        match solver.step() {
+            Ok(()) =>
+                (),
+            Err(solver::simulated_annealing::StepError::TempTooLow) if reheats_count < cli_args.max_reheats_count => {
+                log::debug!(
+                    "temperature is too low for task {}: performing reheat ({} left)",
+                    cli_args.max_reheats_count - reheats_count,
+                    problem_desc.task_id,
+                );
+                solver.reheat(cli_args.reheat_factor);
+                reheats_count += 1;
+            },
+            Err(solver::simulated_annealing::StepError::TempTooLow) => {
+                log::debug!("annealing done for task {}", problem_desc.task_id);
+                return Ok(());
+            }
+        }
+        match solver.fitness() {
+            solver::simulated_annealing::Fitness::FigureScored { score, } =>
+                if best_solution.map_or(true, |best_score| score < best_score) {
+                    best_solution = Some(score);
+                    let pose = problem::Pose {
+                        vertices: solver.vertices().to_vec(),
+                        bonuses: None,
+                    };
+                    pose.write_to_file(&problem_desc.pose_file)
+                        .map_err(Error::PoseExport)?;
+                    log::info!(
+                        "SCORE: {} | new best solution found for task {}, pose has been written to {:?}",
+                        score,
+                        problem_desc.task_id,
+                        problem_desc.pose_file,
+                    );
+                },
+            solver::simulated_annealing::Fitness::FigureCorrupted { .. } |
+            solver::simulated_annealing::Fitness::NotFitHole { .. } =>
+                (),
+        }
+    }
 }
 
 fn sync_problems_directory(cli_args: &CliArgs) -> Result<Vec<ProblemDesc>, Error> {
