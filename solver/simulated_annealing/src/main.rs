@@ -59,6 +59,7 @@ fn main() -> Result<(), Error> {
             minimum_temp: 2.0,
             valid_edge_accept_prob: cli_args.valid_edge_accept_prob,
             iterations_per_cooling_step: cli_args.iterations_per_cooling_step,
+            operating_mode: solver::simulated_annealing::OperatingMode::ScoreMaximizer,
         },
     );
 
