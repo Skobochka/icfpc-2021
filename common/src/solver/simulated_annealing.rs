@@ -53,7 +53,7 @@ impl SimulatedAnnealingSolver {
         generate_vertices(&solver, &mut vertices_cur, &mut frozen_vertices_indices, params.operating_mode);
 
         let temp = params.max_temp;
-        let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur);
+        let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur, &solver.provide_bonuses);
 
         SimulatedAnnealingSolver {
             solver,
@@ -71,7 +71,7 @@ impl SimulatedAnnealingSolver {
         generate_vertices(&self.solver, &mut self.vertices_cur, &mut self.frozen_vertices_indices, self.params.operating_mode);
         self.temp = self.params.max_temp;
         self.steps = 0;
-        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur);
+        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur, &self.solver.provide_bonuses);
     }
 
     pub fn reheat(&mut self, temp_factor: f64) {
@@ -103,7 +103,7 @@ impl SimulatedAnnealingSolver {
             let vertex_index = loop {
                 let edge_index = rng.gen_range(0 .. self.solver.problem.figure.edges.len());
                 let edge = &self.solver.problem.figure.edges[edge_index];
-                let (is_valid, _ratio) = solver::is_edge_ratio_valid(edge, &self.vertices_tmp, &self.solver.problem);
+                let (is_valid, _ratio) = solver::is_edge_ratio_valid(edge, &self.vertices_tmp, &self.solver.problem, &self.solver.provide_bonuses);
                 if is_valid {
                     let accept_prob = rng.gen_range(0.0 .. 1.0);
                     if accept_prob >= self.params.valid_edge_accept_prob {
@@ -134,7 +134,7 @@ impl SimulatedAnnealingSolver {
                 }
             };
             self.vertices_tmp[vertex_index] = moved_vertex;
-            let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp);
+            let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.provide_bonuses);
 
             let energy_cur = self.fitness_cur.energy();
             let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
@@ -232,17 +232,17 @@ fn generate_vertices(
 }
 
 impl Fitness {
-    fn calc(problem: &problem::Problem, vertices: &[problem::Point]) -> Self {
+    fn calc(problem: &problem::Problem, vertices: &[problem::Point], bonuses: &[problem::PoseBonus]) -> Self {
         let mut is_ok = true;
         let mut ratio_sum = 0.0;
         for edge in &problem.figure.edges {
-            let (is_valid, ratio) = solver::is_edge_ratio_valid(edge, vertices, problem);
+            let (is_valid, ratio) = solver::is_edge_ratio_valid(edge, vertices, problem, bonuses);
             if !is_valid { is_ok = false; }
             ratio_sum += ratio;
         }
         let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
         if is_ok {
-            match problem.score_vertices(vertices, None) {
+            match problem.score_vertices(vertices, bonuses.get(0).cloned()) {
                 Ok(score) =>
                     Fitness::FigureScored { score, },
                 Err(problem::PoseValidationError::VerticeCountMismatch) =>

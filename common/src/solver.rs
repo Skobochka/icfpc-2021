@@ -127,17 +127,22 @@ impl Solver {
     }
 }
 
-pub fn is_edge_ratio_valid(edge: &problem::Edge, vertices: &[problem::Point], problem: &problem::Problem) -> (bool, f64) {
+pub fn is_edge_ratio_valid(
+    edge: &problem::Edge,
+    vertices: &[problem::Point],
+    problem: &problem::Problem,
+    _bonuses: &[problem::PoseBonus],
+)
+    -> (bool, f64)
+{
     let sample_vertex_a = problem.figure.vertices[edge.0];
     let sample_vertex_b = problem.figure.vertices[edge.1];
 
     let try_vertex_a = vertices[edge.0];
     let try_vertex_b = vertices[edge.1];
 
-    let sample_sq_dist = (sample_vertex_a.0 - sample_vertex_b.0) * (sample_vertex_a.0 - sample_vertex_b.0)
-        + (sample_vertex_a.1 - sample_vertex_b.1) * (sample_vertex_a.1 - sample_vertex_b.1);
-    let try_sq_dist = (try_vertex_a.0 - try_vertex_b.0) * (try_vertex_a.0 - try_vertex_b.0)
-        + (try_vertex_a.1 - try_vertex_b.1) * (try_vertex_a.1 - try_vertex_b.1);
+    let sample_sq_dist = problem::distance(&sample_vertex_a, &sample_vertex_b);
+    let try_sq_dist = problem::distance(&try_vertex_a, &try_vertex_b);
 
     let ratio = ((try_sq_dist as f64 / sample_sq_dist as f64) - 1.0).abs();
     (ratio <= problem.epsilon as f64 / 1000000.0, ratio)
