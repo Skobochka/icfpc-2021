@@ -98,9 +98,9 @@ fn main() -> Result<(), Error> {
             }
             if current_workers_count >= cli_args.worker_slaves_count || available_problems.problems.is_empty() {
                 let task_id = slaves_rx.recv().unwrap()?;
-                log::info!("slave done with task = {}", task_id);
                 current_workers_count -= 1;
                 tasks_done += 1;
+                log::info!("slave done with task = {}; current_workers_count = {}, tasks_done = {}", task_id, current_workers_count, tasks_done);
                 continue;
             }
 
@@ -125,7 +125,7 @@ struct ProblemDesc {
     problem_file: PathBuf,
     pose_file: PathBuf,
     task_id: String,
-    unlocked_bonuses: Vec<problem::ProblemBonus>,
+    unlocked_bonuses: Vec<problem::ProblemBonusType>,
 }
 
 struct AvailableProblems {
@@ -150,13 +150,13 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
 
     let maybe_pose_score = match problem::Pose::from_file(&problem_desc.pose_file) {
         Ok(pose) => {
-            match pose.bonuses {
-                Some(bonuses) if !bonuses.is_empty() => {
-                    log::info!("skipping task {} because of bonuses unlocked", problem_desc.task_id);
-                    return Ok(());
+            if let Some(ref bonuses) = problem.bonuses {
+                for bonus in bonuses {
+                    if pose.vertices.iter().find(|v| v == &&bonus.position).is_some() {
+                        log::info!("skipping task {} because of bonuses unlocked", problem_desc.task_id);
+                        return Ok(());
+                    }
                 }
-                Some(..) | None =>
-                    (),
             }
             match problem.score_pose(&pose) {
                 Ok(0) => {
@@ -336,7 +336,7 @@ fn gather_unlocked_bonuses(problems: &mut [ProblemDesc]) -> Result<(), Error> {
                 let target_task_id = format!("{}", bonus.problem.0);
                 if let Some(target_problem) = problems.iter_mut().find(|p| p.task_id == target_task_id) {
                     log::debug!("unlocked {:?} for task {}", bonus, target_task_id);
-                    target_problem.unlocked_bonuses.push(bonus);
+                    target_problem.unlocked_bonuses.push(bonus.bonus);
                 }
             }
         }
