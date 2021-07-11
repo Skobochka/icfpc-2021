@@ -179,11 +179,11 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             Ok(()) =>
                 (),
             Err(solver::simulated_annealing::StepError::TempTooLow) if reheats_count < cli_args.max_reheats_count => {
-                log::debug!(
-                    "temperature is too low for task {}: performing reheat ({} left)",
-                    problem_desc.task_id,
-                    cli_args.max_reheats_count - reheats_count,
-                );
+                // log::debug!(
+                //     "temperature is too low for task {}: performing reheat ({} left)",
+                //     problem_desc.task_id,
+                //     cli_args.max_reheats_count - reheats_count,
+                // );
                 solver.reheat(cli_args.reheat_factor);
                 reheats_count += 1;
             },
@@ -194,7 +194,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                     let mut headers = reqwest::header::HeaderMap::new();
                     let mut auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer: {}", cli_args.api_token))
                         .map_err(Error::WebClientHeader)?;
-                    auth_value.set_sensitive(true);
+                    // auth_value.set_sensitive(true);
                     headers.insert("Authorization", auth_value);
                     let body = serde_json::to_string(&pose)
                         .map_err(Error::PoseSerialize)?;
