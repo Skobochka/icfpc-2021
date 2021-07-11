@@ -486,7 +486,7 @@ impl Env {
 
     pub fn enter_solver_simulated_annealing(&mut self) -> Result<(), SimulatedAnnealingSolverError> {
         let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-            solver::Solver::new(&self.problem)
+            solver::Solver::new(&self.problem, Some(self.problem.export_pose()))
                 .map_err(SimulatedAnnealingSolverError::SolverCreate)?,
             solver::simulated_annealing::Params {
                 max_temp: 100.0,

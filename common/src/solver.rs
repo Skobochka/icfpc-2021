@@ -16,6 +16,8 @@ pub struct Solver {
     field_width: i64,
     field_height: i64,
     problem: problem::Problem,
+    pose: problem::Pose,
+    pose_score: i64,
 }
 
 #[derive(Debug)]
@@ -25,7 +27,7 @@ pub enum CreateError {
 }
 
 impl Solver {
-    pub fn new(problem: &problem::Problem) -> Result<Solver, CreateError> {
+    pub fn new(problem: &problem::Problem, pose: Option<problem::Pose>) -> Result<Solver, CreateError> {
         if problem.hole.is_empty() {
             return Err(CreateError::NoPointsInHole);
         }
@@ -72,6 +74,18 @@ impl Solver {
             }
         }
 
+        let pose = match pose {
+            None => problem::Pose {
+                vertices: problem.figure.vertices.clone(),
+                bonuses: None,
+            },
+            Some(pose) => pose,
+        };
+        let pose_score = match problem.score_pose(&pose) {
+            Ok(score) => score,
+            _ => i64::MAX,
+        };
+
         Ok(Solver {
             hole_mask,
             field_min,
@@ -80,6 +94,8 @@ impl Solver {
             field_width,
             field_height,
             problem: problem.clone(),
+            pose,
+            pose_score,
         })
     }
 
@@ -124,7 +140,7 @@ mod tests {
     fn is_hole() {
         let problem_data = r#"{"bonuses":[{"bonus":"GLOBALIST","problem":72,"position":[17,10]}],"hole":[[34,0],[17,30],[10,62],[13,30],[0,0]],"epsilon":6731,"figure":{"edges":[[0,1],[0,3],[1,2],[1,3],[2,4],[3,4]],"vertices":[[0,0],[0,34],[17,62],[30,17],[45,46]]}}"#;
         let problem: problem::Problem = serde_json::from_str(problem_data).unwrap();
-        let solver = Solver::new(&problem).unwrap();
+        let solver = Solver::new(&problem, None).unwrap();
         let hole_poly = problem.hole_polygon();
         for y in solver.field_min.1 ..= solver.field_max.1 {
             for x in solver.field_min.0 ..= solver.field_max.0 {
@@ -139,7 +155,7 @@ mod tests {
     fn is_hole_task13() {
         let problem_data = r#"{"bonuses":[{"bonus":"GLOBALIST","problem":46,"position":[20,20]}],"hole":[[20,0],[40,20],[20,40],[0,20]],"epsilon":2494,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[15,21],[34,0],[0,45],[19,24]]}}"#;
         let problem: problem::Problem = serde_json::from_str(problem_data).unwrap();
-        let solver = Solver::new(&problem).unwrap();
+        let solver = Solver::new(&problem, None).unwrap();
         assert_eq!(solver.is_hole(&problem::Point(40, 20)), true);
         assert_eq!(solver.is_hole(&problem::Point(20, 0)), true);
         assert_eq!(solver.is_hole(&problem::Point(0, 20)), true);

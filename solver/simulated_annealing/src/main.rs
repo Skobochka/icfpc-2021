@@ -47,8 +47,11 @@ fn main() -> Result<(), Error> {
         .map_err(Error::ProblemLoad)?;
     log::debug!(" ;; problem loaded: {:?}", problem);
 
+    let pose = problem::Pose::from_file(&cli_args.common.pose_file).ok();
+    log::debug!(" ;; pose loaded: {:?}", pose);
+
     let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-        solver::Solver::new(&problem)
+        solver::Solver::new(&problem, pose)
             .map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,

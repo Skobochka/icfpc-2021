@@ -33,8 +33,11 @@ fn main() -> Result<(), Error> {
         .map_err(Error::ProblemLoad)?;
     log::debug!(" ;; problem loaded: {:?}", problem);
 
+    let pose = problem::Pose::from_file(&cli_args.common.pose_file).ok();
+    log::debug!(" ;; pose loaded: {:?}", pose);
+
     let solver = solver::bruteforce::BruteforceSolver::new(
-        solver::Solver::new(&problem)
+        solver::Solver::new(&problem, pose)
             .map_err(Error::SolverCreate)?,
         );
 
