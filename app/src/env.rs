@@ -496,6 +496,7 @@ impl Env {
                 minimum_temp: 2.0,
                 valid_edge_accept_prob: 0.5,
                 iterations_per_cooling_step: 10000,
+                operating_mode: solver::simulated_annealing::OperatingMode::BonusCollector,
             },
         );
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };

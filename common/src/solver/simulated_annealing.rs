@@ -26,6 +26,7 @@ pub struct SimulatedAnnealingSolver {
     params: Params,
     vertices_cur: Vec<problem::Point>,
     vertices_tmp: Vec<problem::Point>,
+    frozen_vertices_indices: Vec<usize>,
     fitness_cur: Fitness,
     temp: f64,
     steps: usize,
@@ -46,7 +47,8 @@ pub enum StepError {
 impl SimulatedAnnealingSolver {
     pub fn new(solver: solver::Solver, params: Params) -> SimulatedAnnealingSolver {
         let mut vertices_cur = Vec::new();
-        generate_vertices(&solver, &mut vertices_cur, params.operating_mode);
+        let mut frozen_vertices_indices = Vec::new();
+        generate_vertices(&solver, &mut vertices_cur, &mut frozen_vertices_indices, params.operating_mode);
 
         let temp = params.max_temp;
         let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur);
@@ -56,6 +58,7 @@ impl SimulatedAnnealingSolver {
             params,
             vertices_cur,
             vertices_tmp: Vec::new(),
+            frozen_vertices_indices,
             fitness_cur,
             temp,
             steps: 0,
@@ -63,7 +66,7 @@ impl SimulatedAnnealingSolver {
     }
 
     pub fn reset(&mut self) {
-        generate_vertices(&self.solver, &mut self.vertices_cur, self.params.operating_mode);
+        generate_vertices(&self.solver, &mut self.vertices_cur, &mut self.frozen_vertices_indices, self.params.operating_mode);
         self.temp = self.params.max_temp;
         self.steps = 0;
         self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur);
@@ -105,11 +108,14 @@ impl SimulatedAnnealingSolver {
                         continue;
                     }
                 }
-                break if rng.gen_range(0.0 .. 1.0) < 0.5 {
+                let try_index = if rng.gen_range(0.0 .. 1.0) < 0.5 {
                     edge.0
                 } else {
                     edge.1
                 };
+                if !self.frozen_vertices_indices.contains(&try_index) {
+                    break try_index;
+                }
             };
             // let vertex_index = rng.gen_range(0 .. self.vertices_tmp.len());
             let vertex = self.vertices_tmp[vertex_index];
@@ -173,6 +179,7 @@ impl SimulatedAnnealingSolver {
 fn generate_vertices(
     solver: &solver::Solver,
     vertices: &mut Vec<problem::Point>,
+    frozen_vertices_indices: &mut Vec<usize>,
     operating_mode: OperatingMode,
 )
 {
@@ -203,8 +210,14 @@ fn generate_vertices(
             match &solver.problem.bonuses {
                 Some(bonuses) if !bonuses.is_empty() => {
                     for bonus in bonuses {
-
-                        todo!()
+                        let frozen_vertex_index = loop {
+                            let index = rng.gen_range(0 .. vertices.len());
+                            if !frozen_vertices_indices.contains(&index) {
+                                break index;
+                            }
+                        };
+                        frozen_vertices_indices.push(frozen_vertex_index);
+                        vertices[frozen_vertex_index] = bonus.position;
                     }
                 },
                 Some(..) | None =>
