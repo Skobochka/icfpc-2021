@@ -18,7 +18,9 @@ pub struct Params {
 #[derive(Clone, Copy, Debug)]
 pub enum OperatingMode {
     ScoreMaximizer,
-    BonusCollector,
+    BonusCollector {
+        target_problem: problem::ProblemId,
+    },
 }
 
 pub struct SimulatedAnnealingSolver {
@@ -206,10 +208,13 @@ fn generate_vertices(
     match operating_mode {
         OperatingMode::ScoreMaximizer =>
             (),
-        OperatingMode::BonusCollector =>
+        OperatingMode::BonusCollector { target_problem, } =>
             match &solver.problem.bonuses {
                 Some(bonuses) if !bonuses.is_empty() => {
                     for bonus in bonuses {
+                        if bonus.problem != target_problem {
+                            continue;
+                        }
                         let frozen_vertex_index = loop {
                             let index = rng.gen_range(0 .. vertices.len());
                             if !frozen_vertices_indices.contains(&index) {
