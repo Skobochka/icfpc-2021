@@ -13,6 +13,10 @@ pub struct CliArgs {
     #[structopt(flatten)]
     pub common: cli::CommonCliArgs,
 
+    /// collect bonus for this task
+    #[structopt(long = "collect-bonus-problem")]
+    pub collect_bonus_problem: Option<usize>,
+
     /// maximum reheats count
     #[structopt(long = "max-reheats-count", default_value = "5")]
     pub max_reheats_count: usize,
@@ -59,7 +63,14 @@ fn main() -> Result<(), Error> {
             minimum_temp: 2.0,
             valid_edge_accept_prob: cli_args.valid_edge_accept_prob,
             iterations_per_cooling_step: cli_args.iterations_per_cooling_step,
-            operating_mode: solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+            operating_mode: match cli_args.collect_bonus_problem {
+                Some(problem_id) =>
+                    solver::simulated_annealing::OperatingMode::BonusCollector {
+                        target_problem: problem::ProblemId(problem_id),
+                    },
+                None =>
+                    solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+            },
         },
     );
 
