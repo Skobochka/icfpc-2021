@@ -764,7 +764,7 @@ mod tests {
         let outer = BoundingBox(Point(0,0), Point(4,4));
         let inner = BoundingBox(Point(1,1), Point(3,3));
 
-        let ring = BoundingRingBox(outer, inner);
+        let ring = SquareRing(outer, inner);
 
         let right = [
             Point(0,0), Point(1,0), Point(2,0), Point(3,0), Point(4,0),
