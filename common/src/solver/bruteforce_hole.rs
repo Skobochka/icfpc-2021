@@ -251,6 +251,7 @@ impl BruteforceHoleSolver {
         (best_pose_score, best_pose)
     }
 
+    #[allow(dead_code)]
     fn run_bounding_box(&self,
                         vert_idx: usize,
                         last_best_score: i64,

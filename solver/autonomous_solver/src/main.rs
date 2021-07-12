@@ -55,6 +55,9 @@ pub struct CliArgs {
     /// addition probability of valid edge mutation
     #[structopt(long = "valid-edge-accept-prob", default_value = "0.5")]
     pub valid_edge_accept_prob: f64,
+    /// frozen edges swap probability
+    #[structopt(long = "frozen-swap-prob", default_value = "0.15")]
+    pub frozen_swap_prob: f64,
     /// cooling step base temperature
     #[structopt(long = "cooling-step-temp", default_value = "1.0")]
     pub cooling_step_temp: f64,
@@ -292,6 +295,7 @@ fn slave_run_task_with(
             cooling_step_temp: cli_args.cooling_step_temp,
             minimum_temp: 2.0,
             valid_edge_accept_prob: cli_args.valid_edge_accept_prob,
+            frozen_swap_prob: cli_args.frozen_swap_prob,
             iterations_per_cooling_step: cli_args.iterations_per_cooling_step,
             operating_mode,
         },
@@ -453,8 +457,9 @@ fn gather_unlocked_bonuses(problems: &mut [ProblemDesc]) -> Result<(), Error> {
         for bonus in available_bonuses {
             if pose.vertices.iter().find(|v| v == &&bonus.position).is_some() {
                 let target_task_id = format!("{}", bonus.problem.0);
+                let source_task_id = problems[problem_index].task_id.clone();
                 if let Some(target_problem) = problems.iter_mut().find(|p| p.task_id == target_task_id) {
-                    log::debug!("unlocked {:?} for task {}", bonus, target_task_id);
+                    log::debug!("task {} unlocked {:?} for task {}", source_task_id, bonus, target_task_id);
                     target_problem.unlocked_bonuses.push((bonus.bonus, problem::ProblemId(problem_index)));
                 }
             }
