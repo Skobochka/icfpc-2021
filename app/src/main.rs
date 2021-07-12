@@ -28,6 +28,7 @@ use piston_window::{
 
 use common::{
     cli,
+    solver,
     problem,
 };
 
@@ -206,7 +207,11 @@ fn main() -> Result<(), Error> {
                 env.figure_reset(),
 
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::U), state: ButtonState::Release, .. }), _timestamp) => {
-                env.enter_solver_simulated_annealing()
+                env.enter_solver_simulated_annealing(solver::simulated_annealing::OperatingMode::ScoreMaximizer)
+                    .map_err(Error::SimulatedAnnealingSolver)?;
+            },
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::P), state: ButtonState::Release, .. }), _timestamp) => {
+                env.enter_solver_simulated_annealing(solver::simulated_annealing::OperatingMode::ZeroHunter)
                     .map_err(Error::SimulatedAnnealingSolver)?;
             },
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::Y), state: ButtonState::Release, .. }), _timestamp) =>

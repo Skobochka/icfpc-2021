@@ -22,6 +22,7 @@ pub enum OperatingMode {
         target_problem: problem::ProblemId,
     },
     BonusHunter,
+    ZeroHunter,
 }
 
 pub struct SimulatedAnnealingSolver {
@@ -265,6 +266,17 @@ fn generate_vertices(
                 },
                 Some(..) | None =>
                     (),
+            },
+        OperatingMode::ZeroHunter =>
+            for &hole_vertex in &solver.problem.hole {
+                let frozen_vertex_index = loop {
+                    let index = rng.gen_range(0 .. vertices.len());
+                    if !frozen_vertices_indices.contains(&index) {
+                        break index;
+                    }
+                };
+                frozen_vertices_indices.push(frozen_vertex_index);
+                vertices[frozen_vertex_index] = hole_vertex;
             },
     }
 }

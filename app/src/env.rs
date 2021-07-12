@@ -505,7 +505,12 @@ impl Env {
         Ok(())
     }
 
-    pub fn enter_solver_simulated_annealing(&mut self) -> Result<(), SimulatedAnnealingSolverError> {
+    pub fn enter_solver_simulated_annealing(
+        &mut self,
+        operating_mode: solver::simulated_annealing::OperatingMode,
+    )
+        -> Result<(), SimulatedAnnealingSolverError>
+    {
         let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
             solver::Solver::new(&self.problem, Some(self.problem.export_pose()))
                 .map_err(SimulatedAnnealingSolverError::SolverCreate)?,
@@ -515,7 +520,7 @@ impl Env {
                 minimum_temp: 2.0,
                 valid_edge_accept_prob: 0.5,
                 iterations_per_cooling_step: 10000,
-                operating_mode: solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+                operating_mode,
             },
         );
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
@@ -532,6 +537,10 @@ impl Env {
                         (),
                     Err(solver::simulated_annealing::StepError::TempTooLow) =>
                         solver.reheat(0.33),
+                    Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInVertexIndex) =>
+                        log::error!("probably infinite loop in vertex index stopping"),
+                    Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInMovedVertex) =>
+                        log::error!("probably infinite loop in moved vertex stopping"),
                 }
                 Ok(())
             },
