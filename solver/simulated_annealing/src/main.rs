@@ -32,6 +32,9 @@ pub struct CliArgs {
     /// addition probability of valid edge mutation
     #[structopt(long = "valid-edge-accept-prob", default_value = "0.5")]
     pub valid_edge_accept_prob: f64,
+    /// frozen edges swap probability
+    #[structopt(long = "frozen-swap-prob", default_value = "0.15")]
+    pub frozen_swap_prob: f64,
     /// cooling step base temperature
     #[structopt(long = "cooling-step-temp", default_value = "1.0")]
     pub cooling_step_temp: f64,
@@ -86,6 +89,7 @@ fn main() -> Result<(), Error> {
             cooling_step_temp: cli_args.cooling_step_temp,
             minimum_temp: 2.0,
             valid_edge_accept_prob: cli_args.valid_edge_accept_prob,
+            frozen_swap_prob: cli_args.frozen_swap_prob,
             iterations_per_cooling_step: cli_args.iterations_per_cooling_step,
             operating_mode: match cli_args.collect_bonus_problem {
                 Some(problem_id) =>
