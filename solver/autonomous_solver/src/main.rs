@@ -187,10 +187,10 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         .iter()
         .filter(|unlocked_bonus| match unlocked_bonus.0 {
             problem::ProblemBonusType::Globalist |
-            problem::ProblemBonusType::Superflex |
-            problem::ProblemBonusType::Wallhack =>
+            problem::ProblemBonusType::Superflex =>
                 true,
-            problem::ProblemBonusType::BreakALeg =>
+            problem::ProblemBonusType::BreakALeg |
+            problem::ProblemBonusType::Wallhack =>
                 false,
         })
         .collect();
