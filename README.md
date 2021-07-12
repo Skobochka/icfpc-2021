@@ -24,9 +24,9 @@ You can find the following projects in the repository:
   - `./solver/simulated_annealing` : command line utility
   - `./common/src/solver/simulated_annealing.rs` : implementation code including several solving modes:
     - `OperatingMode::ScoreMaximizer` : only try to maximize score
-      `OperatingMode::BonusCollector { target_problem }` : try to maximize score while collecting this particular bonus
-      `OperatingMode::BonusHunter` : be sure to collect all available bonuses, then maximize score
-      `OperatingMode::ZeroHunter` : try to obtain zero score for this problem
+    - `OperatingMode::BonusCollector { target_problem }` : try to maximize score while collecting this particular bonus
+    - `OperatingMode::BonusHunter` : be sure to collect all available bonuses, then maximize score
+    - `OperatingMode::ZeroHunter` : try to obtain zero score for this problem
     There is support for `GLOBALIST`, `WALLHACK` and `SUPERFLEX` bonus. We didn't manage to use `BREAK_A_LEG`.
 - Background service for iterative problems solving with results submission: `./solver/autonomous_solver`
   This tries to maximize bonuses collected in each problem in order to use them while solving corresponding target problems.
