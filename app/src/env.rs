@@ -517,11 +517,11 @@ impl Env {
                 .map_err(SimulatedAnnealingSolverError::SolverCreate)?,
             solver::simulated_annealing::Params {
                 max_temp: 100.0,
-                cooling_step_temp: 1.0,
+                cooling_step_temp: 0.1,
                 minimum_temp: 2.0,
                 valid_edge_accept_prob: 0.5,
                 frozen_swap_prob: 0.15,
-                iterations_per_cooling_step: 10000,
+                iterations_per_cooling_step: 1000,
                 operating_mode,
             },
         ).map_err(SimulatedAnnealingSolverError::SimulatedAnnealingSolverCreate)?;
