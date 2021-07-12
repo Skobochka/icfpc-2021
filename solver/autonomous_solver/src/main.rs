@@ -197,27 +197,29 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
 
     // try gather zero score, maybe we are lucky
     let mut temporary_best_solution = None;
-    if allowed_unlocked_bonuses.is_empty() {
-        slave_run_task_with(
-            problem_desc,
-            &problem,
-            &mut temporary_best_solution,
-            cli_args,
-            None,
-            solver::simulated_annealing::OperatingMode::ZeroHunter,
-        )?;
-    } else {
-        for &&unlocked_bonus in &allowed_unlocked_bonuses {
+    if unlocked_bonuses_here.is_empty() {
+        if allowed_unlocked_bonuses.is_empty() {
             slave_run_task_with(
                 problem_desc,
                 &problem,
                 &mut temporary_best_solution,
                 cli_args,
-                Some(unlocked_bonus),
+                None,
                 solver::simulated_annealing::OperatingMode::ZeroHunter,
             )?;
+        } else {
+            for &&unlocked_bonus in &allowed_unlocked_bonuses {
+                slave_run_task_with(
+                    problem_desc,
+                    &problem,
+                    &mut temporary_best_solution,
+                    cli_args,
+                    Some(unlocked_bonus),
+                    solver::simulated_annealing::OperatingMode::ZeroHunter,
+                )?;
+            }
         }
-    };
+    }
     if temporary_best_solution.is_some() {
         // we are lucky
         best_solution = temporary_best_solution;
@@ -329,7 +331,7 @@ fn slave_run_task_with(
     log::info!(
         "slave started task {}, current pose score: {:?}, use_bonus: {:?}, operating_mode = {:?}",
         problem_desc.task_id,
-        best_solution,
+        best_solution.as_ref().map(|best| best.1),
         use_bonus,
         operating_mode,
     );
