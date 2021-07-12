@@ -56,8 +56,10 @@ fn main() -> Result<(), Error> {
                 problem: problem::ProblemId(0), // todo: add correct number here!
             }]);
         },
+        None => {
+            pose.bonuses = None;
+        }
         Some(a) => unimplemented!("Unknown bonus type '{}'", a),
-        _ => {},
     };
 
     let solver = solver::bruteforce_hole::BruteforceHoleSolver::new(
