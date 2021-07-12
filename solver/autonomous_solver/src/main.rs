@@ -163,10 +163,10 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                 }
             }
             match problem.score_pose(&pose) {
-                Ok(0) => {
-                    log::info!("skipping task {} because of zero score", problem_desc.task_id);
-                    return Ok(());
-                },
+                // Ok(0) => {
+                //     log::info!("skipping task {} because of zero score", problem_desc.task_id);
+                //     return Ok(());
+                // },
                 Ok(score) =>
                     Some((pose, score)),
                 Err(error) =>
@@ -179,12 +179,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             return Err(Error::PoseLoad(error)),
     };
 
-    let (mut best_solution, maybe_pose) = match maybe_pose_score {
-        Some((pose, score)) =>
-            (Some(score), Some(pose)),
-        None =>
-            (None, None),
-    };
+    let mut best_solution = maybe_pose_score;
 
     let allowed_unlocked_bonuses: Vec<_> = problem_desc
         .unlocked_bonuses
@@ -205,7 +200,6 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         slave_run_task_with(
             problem_desc,
             &problem,
-            &maybe_pose,
             &mut temporary_best_solution,
             cli_args,
             None,
@@ -216,7 +210,6 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             slave_run_task_with(
                 problem_desc,
                 &problem,
-                &maybe_pose,
                 &mut temporary_best_solution,
                 cli_args,
                 Some(unlocked_bonus),
@@ -226,44 +219,70 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     };
     if temporary_best_solution.is_some() {
         // we are lucky
-        return Ok(());
-    }
-    // not this time, proceed with regular stuff
-
-    let operating_mode = if unlocked_bonuses_here.is_empty() {
-        solver::simulated_annealing::OperatingMode::ScoreMaximizer
-    } else if unlocked_bonuses_here.len() == 1 {
-        solver::simulated_annealing::OperatingMode::BonusCollector {
-            target_problem: unlocked_bonuses_here[0],
-        }
+        best_solution = temporary_best_solution;
     } else {
-        log::info!("skipping task {} because of many bonuses already unlocked", problem_desc.task_id);
-        return Ok(());
-    };
+        // not this time, proceed with regular stuff
 
-    if allowed_unlocked_bonuses.is_empty() {
-        slave_run_task_with(
-            problem_desc,
-            &problem,
-            &maybe_pose,
-            &mut best_solution,
-            cli_args,
-            None,
-            operating_mode,
-        )?;
-    } else {
-        for &&unlocked_bonus in &allowed_unlocked_bonuses {
+        let operating_mode = if unlocked_bonuses_here.is_empty() {
+            solver::simulated_annealing::OperatingMode::ScoreMaximizer
+        } else if unlocked_bonuses_here.len() == 1 {
+            solver::simulated_annealing::OperatingMode::BonusCollector {
+                target_problem: unlocked_bonuses_here[0],
+            }
+        } else {
+            log::info!("skipping task {} because of many bonuses already unlocked", problem_desc.task_id);
+            return Ok(());
+        };
+
+        if allowed_unlocked_bonuses.is_empty() {
             slave_run_task_with(
                 problem_desc,
                 &problem,
-                &maybe_pose,
                 &mut best_solution,
                 cli_args,
-                Some(unlocked_bonus),
+                None,
                 operating_mode,
             )?;
-        }
-    };
+        } else {
+            for &&unlocked_bonus in &allowed_unlocked_bonuses {
+                slave_run_task_with(
+                    problem_desc,
+                    &problem,
+                    &mut best_solution,
+                    cli_args,
+                    Some(unlocked_bonus),
+                    operating_mode,
+                )?;
+            }
+        };
+    }
+
+    if let Some((pose, score)) = best_solution {
+        let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
+        let mut headers = reqwest::header::HeaderMap::new();
+        let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", cli_args.api_token))
+            .map_err(Error::WebClientHeader)?;
+        // auth_value.set_sensitive(true);
+        headers.insert("Authorization", auth_value);
+        let body = serde_json::to_string(&pose)
+            .map_err(Error::PoseSerialize)?;
+
+        log::info!(
+            "preparing submission for for task {} with score {} to {:?}, headers: {:?}",
+            problem_desc.task_id,
+            score,
+            url,
+            headers,
+        );
+
+        let send_result = reqwest::blocking::Client::builder()
+            .default_headers(headers)
+            .build().map_err(Error::WebClientBuilder)?
+            .post(&url)
+            .body(body)
+            .send().map_err(Error::WebClientSend)?;
+        log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
+    }
 
     Ok(())
 }
@@ -271,8 +290,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
 fn slave_run_task_with(
     problem_desc: &ProblemDesc,
     problem: &problem::Problem,
-    maybe_pose: &Option<problem::Pose>,
-    best_solution: &mut Option<i64>,
+    best_solution: &mut Option<(problem::Pose, i64)>,
     cli_args: &CliArgs,
     use_bonus: Option<(problem::ProblemBonusType, problem::ProblemId)>,
     operating_mode: solver::simulated_annealing::OperatingMode,
@@ -288,7 +306,7 @@ fn slave_run_task_with(
     );
 
     let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-        solver::Solver::with_bonus(problem, maybe_pose.as_ref().map(Clone::clone), use_bonus.map(|ub| ub.0))
+        solver::Solver::with_bonus(problem, best_solution.as_ref().map(|best| best.0.clone()), use_bonus.map(|ub| ub.0))
             .map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
             max_temp: 100.0,
@@ -304,7 +322,6 @@ fn slave_run_task_with(
     let solving_start_time = time::Instant::now();
 
     let mut reheats_count = 0;
-    let mut submission = None;
     loop {
         if solving_start_time.elapsed().as_secs() > cli_args.worker_solving_timeout_s {
             log::info!("forcing terminate task {} because of timeout {} s", problem_desc.task_id, cli_args.worker_solving_timeout_s);
@@ -338,8 +355,7 @@ fn slave_run_task_with(
         }
         match solver.fitness() {
             solver::simulated_annealing::Fitness::FigureScored { score, } =>
-                if best_solution.map_or(true, |best_score| score < best_score) {
-                    *best_solution = Some(score);
+                if best_solution.as_ref().map_or(true, |best| score < best.1) {
                     let pose = problem::Pose {
                         vertices: solver.vertices().to_vec(),
                         bonuses: match use_bonus {
@@ -363,7 +379,7 @@ fn slave_run_task_with(
                         problem_desc.task_id,
                         problem_desc.pose_file,
                     );
-                    submission = Some((pose, score));
+                    *best_solution = Some((pose, score));
                 },
             solver::simulated_annealing::Fitness::FigureCorrupted { .. } |
             solver::simulated_annealing::Fitness::NotFitHole { .. } =>
@@ -371,32 +387,6 @@ fn slave_run_task_with(
         }
     }
 
-    if let Some((pose, score)) = submission {
-        let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
-        let mut headers = reqwest::header::HeaderMap::new();
-        let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", cli_args.api_token))
-            .map_err(Error::WebClientHeader)?;
-        // auth_value.set_sensitive(true);
-        headers.insert("Authorization", auth_value);
-        let body = serde_json::to_string(&pose)
-            .map_err(Error::PoseSerialize)?;
-
-        log::info!(
-            "preparing submission for for task {} with score {} to {:?}, headers: {:?}",
-            problem_desc.task_id,
-            score,
-            url,
-            headers,
-        );
-
-        let send_result = reqwest::blocking::Client::builder()
-            .default_headers(headers)
-            .build().map_err(Error::WebClientBuilder)?
-            .post(&url)
-            .body(body)
-            .send().map_err(Error::WebClientSend)?;
-        log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
-    }
     Ok(())
 }
 
