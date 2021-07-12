@@ -2,6 +2,8 @@ use std::{
     fs,
     io,
     path::Path,
+    cmp,
+    collections::HashSet,
 };
 
 use geo::{
@@ -495,6 +497,68 @@ pub fn distance(p: &Point, q: &Point) -> i64 {
     (p.0 - q.0) * (p.0 - q.0) + (p.1 - q.1) * (p.1 - q.1)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct BoundingBox(Point, Point);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct SquareRing(BoundingBox, BoundingBox);
+
+impl SquareRing {
+    pub fn point_set(&self) -> HashSet<Point> {
+        let outer_box = &self.0;
+        let inner_box = &self.1;
+
+        let capacity = ((outer_box.0.0 - outer_box.1.0).abs() * (outer_box.0.1 - outer_box.1.1).abs()) as usize;
+        let mut set = HashSet::with_capacity(capacity);
+
+        for x in cmp::max(0, cmp::min(outer_box.0.0, outer_box.1.0))..=cmp::max(outer_box.0.0, outer_box.1.0) {
+            for y in cmp::max(0, cmp::min(outer_box.0.1, outer_box.1.1))..=cmp::max(outer_box.0.1, outer_box.1.1) {
+                if x > cmp::min(inner_box.0.0, inner_box.1.0)
+                    && x < cmp::max(inner_box.0.0, inner_box.1.0)
+                    && y > cmp::min(inner_box.0.1, inner_box.1.1)
+                    && y < cmp::max(inner_box.0.1, inner_box.1.1) {
+                    continue;
+                }
+                set.insert(Point(x, y));
+            }
+        }
+
+        set
+    }
+
+    pub fn point_set_within_hole(&self, hole: &Vec<Point>) -> HashSet<Point> {
+        let geo_hole = geo::Polygon::new(hole.clone().into(), vec![]);
+
+        let outer_box = &self.0;
+        let inner_box = &self.1;
+
+        let capacity = ((outer_box.0.0 - outer_box.1.0).abs() * (outer_box.0.1 - outer_box.1.1).abs()) as usize;
+        let mut set = HashSet::with_capacity(capacity);
+
+        for x in cmp::max(0, cmp::min(outer_box.0.0, outer_box.1.0))..=cmp::max(outer_box.0.0, outer_box.1.0) {
+            for y in cmp::max(0, cmp::min(outer_box.0.1, outer_box.1.1))..=cmp::max(outer_box.0.1, outer_box.1.1) {
+                if x > cmp::min(inner_box.0.0, inner_box.1.0)
+                    && x < cmp::max(inner_box.0.0, inner_box.1.0)
+                    && y > cmp::min(inner_box.0.1, inner_box.1.1)
+                    && y < cmp::max(inner_box.0.1, inner_box.1.1) {
+                        continue;
+                    }
+
+                let point = Point(x, y);
+
+                if !geo_hole.contains(&point) {
+                    continue;
+                }
+
+                set.insert(point);
+            }
+        }
+
+        set
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -681,5 +745,22 @@ mod tests {
         ];
         assert!(problem.score_vertices_check_hole(&pose_vertices, None).is_err());
         assert!(problem.score_vertices_check_hole(&pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })).is_err());
+    }
+
+    #[test]
+    fn bounding_ring_box() {
+        let outer = BoundingBox(Point(0,0), Point(4,4));
+        let inner = BoundingBox(Point(1,1), Point(3,3));
+
+        let ring = BoundingRingBox(outer, inner);
+
+        let right = [
+            Point(0,0), Point(1,0), Point(2,0), Point(3,0), Point(4,0),
+            Point(0,1), Point(1,1), Point(2,1), Point(3,1), Point(4,1),
+            Point(0,2), Point(1,2),             Point(3,2), Point(4,2),
+            Point(0,3), Point(1,3), Point(2,3), Point(3,3), Point(4,3),
+            Point(0,4), Point(1,4), Point(2,4), Point(3,4), Point(4,4),
+            ];
+        assert_eq!(ring.point_set(), right.iter().cloned().collect());
     }
 }
