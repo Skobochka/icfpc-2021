@@ -292,6 +292,9 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     }
 
     if let Some((pose, score)) = best_solution {
+        pose.write_to_file(&problem_desc.pose_file)
+            .map_err(Error::PoseExport)?;
+
         let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
         let mut headers = reqwest::header::HeaderMap::new();
         let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", cli_args.api_token))
@@ -405,8 +408,6 @@ fn slave_run_task_with(
                                 Some(vec![problem::PoseBonus::Superflex { problem: source_problem, }]),
                         },
                     };
-                    pose.write_to_file(&problem_desc.pose_file)
-                        .map_err(Error::PoseExport)?;
                     log::info!(
                         "SCORE: {} | new best solution found for task {}, pose has been written to {:?}",
                         score,
