@@ -85,6 +85,7 @@ pub enum CreateError {
 #[derive(Debug)]
 pub enum SimulatedAnnealingSolverError {
     SolverCreate(solver::CreateError),
+    SimulatedAnnealingSolverCreate(solver::simulated_annealing::CreateError),
     SolverStep(solver::simulated_annealing::StepError),
 }
 
@@ -523,7 +524,7 @@ impl Env {
                 iterations_per_cooling_step: 10000,
                 operating_mode,
             },
-        );
+        ).map_err(SimulatedAnnealingSolverError::SimulatedAnnealingSolverCreate)?;
         self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
         Ok(())
     }
@@ -542,6 +543,20 @@ impl Env {
                         log::error!("probably infinite loop in vertex index stopping"),
                     Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInMovedVertex) =>
                         log::error!("probably infinite loop in moved vertex stopping"),
+                    Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInFrozenIndex) =>
+                        log::error!("probably infinite loop in frozen index, stopping"),
+                    Err(solver::simulated_annealing::StepError::GenerateVertices(
+                        solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusCollector,
+                    )) =>
+                        log::error!("probably infinite loop in generate vertices for bonus collector, stopping"),
+                    Err(solver::simulated_annealing::StepError::GenerateVertices(
+                        solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusHunter,
+                    )) =>
+                        log::error!("probably infinite loop in generate vertices for bonus hunter, stopping"),
+                    Err(solver::simulated_annealing::StepError::GenerateVertices(
+                        solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInZeroHunter,
+                    )) =>
+                        log::error!("probably infinite loop in generate vertices for zero hunter, stopping"),
                 }
                 Ok(())
             },
@@ -715,7 +730,7 @@ impl Env {
             SolverMode::SimulatedAnnealing { .. } =>
                 if let Some(problem_id) = self.bonus_highlight {
                     if let Ok(solver) = solver::Solver::new(&self.problem, Some(self.problem.export_pose())) {
-                        let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
+                        if let Ok(solver) = solver::simulated_annealing::SimulatedAnnealingSolver::new(
                             solver,
                             solver::simulated_annealing::Params {
                                 max_temp: 100.0,
@@ -728,8 +743,9 @@ impl Env {
                                     target_problem: problem_id,
                                 },
                             },
-                        );
-                        self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
+                        ) {
+                            self.solver_mode = SolverMode::SimulatedAnnealing { solver, };
+                        }
                     }
                 },
         }
