@@ -227,27 +227,27 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     } else {
         // try unlock all bonuses, maybe we are lucky
         let mut temporary_best_solution = None;
-        if allowed_unlocked_bonuses.is_empty() {
-            slave_run_task_with(
-                problem_desc,
-                &problem,
-                &mut temporary_best_solution,
-                cli_args,
-                None,
-                solver::simulated_annealing::OperatingMode::BonusHunter,
-            )?;
-        } else {
-            for &&unlocked_bonus in &allowed_unlocked_bonuses {
-                slave_run_task_with(
-                    problem_desc,
-                    &problem,
-                    &mut temporary_best_solution,
-                    cli_args,
-                    Some(unlocked_bonus),
-                    solver::simulated_annealing::OperatingMode::BonusHunter,
-                )?;
-            }
-        };
+        // if allowed_unlocked_bonuses.is_empty() {
+        //     slave_run_task_with(
+        //         problem_desc,
+        //         &problem,
+        //         &mut temporary_best_solution,
+        //         cli_args,
+        //         None,
+        //         solver::simulated_annealing::OperatingMode::BonusHunter,
+        //     )?;
+        // } else {
+        //     for &&unlocked_bonus in &allowed_unlocked_bonuses {
+        //         slave_run_task_with(
+        //             problem_desc,
+        //             &problem,
+        //             &mut temporary_best_solution,
+        //             cli_args,
+        //             Some(unlocked_bonus),
+        //             solver::simulated_annealing::OperatingMode::BonusHunter,
+        //         )?;
+        //     }
+        // };
         match (&temporary_best_solution, &best_solution) {
             // (&Some((_, score)), &None) {  // TODO as well as below
             (&Some((_, score)), &Some((_, best_score))) if score < best_score => {
@@ -257,16 +257,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             _ => {
                 // not this time, proceed with regular stuff
 
-                let operating_mode = if unlocked_bonuses_here.is_empty() {
-                    solver::simulated_annealing::OperatingMode::ScoreMaximizer
-                } else if unlocked_bonuses_here.len() == 1 {
-                    solver::simulated_annealing::OperatingMode::BonusCollector {
-                        target_problem: unlocked_bonuses_here[0],
-                    }
-                } else {
-                    log::info!("skipping task {} because of many bonuses already unlocked", problem_desc.task_id);
-                    return Ok(());
-                };
+                let operating_mode = solver::simulated_annealing::OperatingMode::ScoreMaximizerg;
 
                 if allowed_unlocked_bonuses.is_empty() {
                     slave_run_task_with(
@@ -298,30 +289,30 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         pose.write_to_file(&problem_desc.pose_file)
             .map_err(Error::PoseExport)?;
 
-        let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
-        let mut headers = reqwest::header::HeaderMap::new();
-        let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", cli_args.api_token))
-            .map_err(Error::WebClientHeader)?;
-        // auth_value.set_sensitive(true);
-        headers.insert("Authorization", auth_value);
-        let body = serde_json::to_string(&pose)
-            .map_err(Error::PoseSerialize)?;
+        // let url = format!("https://poses.live/api/problems/{}/solutions", problem_desc.task_id);
+        // let mut headers = reqwest::header::HeaderMap::new();
+        // let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", cli_args.api_token))
+        //     .map_err(Error::WebClientHeader)?;
+        // // auth_value.set_sensitive(true);
+        // headers.insert("Authorization", auth_value);
+        // let body = serde_json::to_string(&pose)
+        //     .map_err(Error::PoseSerialize)?;
 
-        log::info!(
-            "preparing submission for for task {} with score {} to {:?}, headers: {:?}",
-            problem_desc.task_id,
-            score,
-            url,
-            headers,
-        );
+        // log::info!(
+        //     "preparing submission for for task {} with score {} to {:?}, headers: {:?}",
+        //     problem_desc.task_id,
+        //     score,
+        //     url,
+        //     headers,
+        // );
 
-        let send_result = reqwest::blocking::Client::builder()
-            .default_headers(headers)
-            .build().map_err(Error::WebClientBuilder)?
-            .post(&url)
-            .body(body)
-            .send().map_err(Error::WebClientSend)?;
-        log::info!("solution submitted for task = {}, result = {:?}", problem_desc.task_id, send_result);
+        // let send_result = reqwest::blocking::Client::builder()
+        //     .default_headers(headers)
+        //     .build().map_err(Error::WebClientBuilder)?
+        //     .post(&url)
+        //     .body(body)
+        //     .send().map_err(Error::WebClientSend)?;
+        log::info!("solution saved for task = {}, result = {:?}", problem_desc.task_id, score);
     }
 
     Ok(())
