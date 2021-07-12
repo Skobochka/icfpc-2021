@@ -237,8 +237,8 @@ impl Problem {
                     /* probably we can allow that for one vertice */
                     match outer_vertex {
                         None => {
-                            let contains_start = geo_hole.contains(&geo_start);
-                            let contains_end = geo_hole.contains(&geo_end);
+                            let contains_start = geo_hole.contains(&geo_start) || geo_hole.exterior().contains(&geo_start);
+                            let contains_end = geo_hole.contains(&geo_end) || geo_hole.exterior().contains(&geo_end);
                             if !contains_start && contains_end {
                                 outer_vertex = Some(from_idx);
                                 continue; // Ok, that's edge belongs to outer-point
@@ -774,5 +774,27 @@ mod tests {
             Point(0,4), Point(1,4), Point(2,4), Point(3,4), Point(4,4),
             ];
         assert_eq!(ring.point_set(), right.iter().cloned().collect());
+    }
+
+    #[test]
+    fn score_vertice_broken_wallhack_tasks() {
+        let problem_47: Problem = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"BREAK_A_LEG","problem":43,"position":[59,26]},{"bonus":"SUPERFLEX","problem":58,"position":[54,9]},{"bonus":"SUPERFLEX","problem":27,"position":[21,18]}],"hole":[[6,14],[36,19],[40,17],[69,0],[79,21],[41,36],[36,33],[16,44],[7,34],[0,28]],"epsilon":41323,"figure":{"edges":[[0,3],[3,7],[7,4],[4,0],[7,10],[10,9],[9,8],[8,7],[4,5],[5,8],[8,6],[6,1],[1,5],[5,2],[2,4]],"vertices":[[0,11],[1,85],[8,56],[11,0],[14,45],[14,59],[14,88],[30,37],[30,56],[56,85],[67,64]]}}"#,
+        ).unwrap();
+        let pose_47: Pose = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"WALLHACK","problem":55}],"vertices":[[22,27],[33,24],[53,15],[12,15],[59,26],[59,12],[21,18],[54,9],[56,28],[19,17],[21,41]]}"#,
+        ).unwrap();
+
+        assert!(problem_47.score_pose(&pose_47).is_err());
+
+        let problem_92: Problem = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"BREAK_A_LEG","problem":99,"position":[96,12]},{"bonus":"SUPERFLEX","problem":30,"position":[30,24]},{"bonus":"GLOBALIST","problem":7,"position":[84,72]}],"hole":[[5,29],[4,18],[0,10],[8,5],[16,13],[21,0],[33,4],[33,44],[47,16],[59,4],[68,3],[78,3],[115,8],[72,18],[83,29],[92,41],[109,42],[101,52],[97,65],[115,59],[115,69],[108,83],[110,100],[102,115],[100,93],[99,81],[85,90],[92,102],[74,98],[70,115],[61,91],[61,80],[77,85],[65,68],[73,58],[91,50],[71,44],[59,55],[55,63],[51,72],[47,83],[41,95],[25,100],[44,108],[26,111],[15,113],[5,115],[2,106],[14,103],[12,92],[24,87],[36,73],[56,34],[24,66],[22,54],[0,82],[4,59],[2,49],[1,40],[19,37]],"epsilon":160000,"figure":{"edges":[[2,5],[5,4],[4,1],[1,0],[0,8],[8,3],[3,7],[7,11],[11,13],[13,12],[12,18],[18,19],[19,14],[14,15],[15,17],[17,16],[16,10],[10,6],[6,2],[8,12],[7,9],[9,3],[8,9],[9,12],[13,9],[9,11],[4,8],[12,14],[5,10],[10,15]],"vertices":[[30,40],[30,50],[40,105],[50,25],[50,45],[50,75],[50,105],[55,15],[55,35],[60,25],[60,80],[65,15],[65,35],[70,25],[70,45],[70,75],[70,105],[80,105],[90,40],[90,50]]}}"#,
+        ).unwrap();
+        let pose_92: Pose = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"WALLHACK","problem":119}],"vertices":[[81,43],[74,35],[15,31],[50,26],[52,33],[35,55],[17,22],[61,27],[61,28],[53,35],[25,49],[52,24],[51,24],[43,32],[50,13],[31,39],[8,70],[10,60],[77,23],[67,22]]}"#,
+        ).unwrap();
+
+        assert!(problem_92.score_pose(&pose_92).is_err());
+
     }
 }
