@@ -78,6 +78,7 @@ pub enum Error {
     WebClientBuilder(reqwest::Error),
     WebClientSend(reqwest::Error),
     WebClientHeader(reqwest::header::InvalidHeaderValue),
+    TaskIdParse(std::num::ParseIntError),
 }
 
 fn main() -> Result<(), Error> {
@@ -447,10 +448,11 @@ fn gather_unlocked_bonuses(problems: &mut [ProblemDesc]) -> Result<(), Error> {
         for bonus in available_bonuses {
             if pose.vertices.iter().find(|v| v == &&bonus.position).is_some() {
                 let target_task_id = format!("{}", bonus.problem.0);
-                let source_task_id = problems[problem_index].task_id.clone();
+                let source_task_id: usize = problems[problem_index].task_id.parse()
+                    .map_err(Error::TaskIdParse)?;
                 if let Some(target_problem) = problems.iter_mut().find(|p| p.task_id == target_task_id) {
                     log::debug!("task {} unlocked {:?} for task {}", source_task_id, bonus, target_task_id);
-                    target_problem.unlocked_bonuses.push((bonus.bonus, problem::ProblemId(problem_index)));
+                    target_problem.unlocked_bonuses.push((bonus.bonus, problem::ProblemId(source_task_id)));
                 }
             }
         }
