@@ -510,10 +510,10 @@ pub fn distance(p: &Point, q: &Point) -> i64 {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct BoundingBox(Point, Point);
+pub struct BoundingBox(pub Point, pub Point);
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct SquareRing(BoundingBox, BoundingBox);
+pub struct SquareRing(pub BoundingBox, pub BoundingBox);
 
 impl SquareRing {
     pub fn point_set(&self) -> HashSet<Point> {
