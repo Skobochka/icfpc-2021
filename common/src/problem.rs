@@ -343,6 +343,18 @@ impl Problem {
         }
         angles
     }
+
+    pub fn distance_cache(&self) -> Vec<i64> {
+        let mut distances = vec![-1; self.figure.vertices.len() * self.figure.vertices.len()];
+
+        for &Edge(from_idx, to_idx) in self.figure.edges.iter() {
+            let distance = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
+            distances[from_idx * self.figure.vertices.len() + to_idx] = distance;
+            distances[to_idx * self.figure.vertices.len() + from_idx] = distance;
+        }
+
+        distances
+    }
 }
 
 #[derive(Debug)]
