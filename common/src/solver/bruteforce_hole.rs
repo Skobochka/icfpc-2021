@@ -26,8 +26,35 @@ impl BoundingBox {
         let capacity = ((self.0.0 - self.1.0).abs() * (self.0.1 - self.1.1).abs()) as usize;
         let mut set = HashSet::with_capacity(capacity);
 
-        for x in cmp::max(0, cmp::min(self.0.0, self.1.0))..cmp::max(self.0.0, self.1.0) {
-            for y in cmp::max(0, cmp::min(self.0.1, self.1.1))..cmp::max(self.0.1, self.1.1) {
+        for x in cmp::max(0, cmp::min(self.0.0, self.1.0))..=cmp::max(self.0.0, self.1.0) {
+            for y in cmp::max(0, cmp::min(self.0.1, self.1.1))..=cmp::max(self.0.1, self.1.1) {
+                set.insert(problem::Point(x, y));
+            }
+        }
+
+        set
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct BoundingRingBox(BoundingBox, BoundingBox);
+
+impl BoundingRingBox {
+    pub fn point_set(&self) -> HashSet<problem::Point> {
+        let outer_box = &self.0;
+        let inner_box = &self.1;
+
+        let capacity = ((outer_box.0.0 - outer_box.1.0).abs() * (outer_box.0.1 - outer_box.1.1).abs()) as usize;
+        let mut set = HashSet::with_capacity(capacity);
+
+        for x in cmp::max(0, cmp::min(outer_box.0.0, outer_box.1.0))..=cmp::max(outer_box.0.0, outer_box.1.0) {
+            for y in cmp::max(0, cmp::min(outer_box.0.1, outer_box.1.1))..=cmp::max(outer_box.0.1, outer_box.1.1) {
+                if x > cmp::min(inner_box.0.0, inner_box.1.0)
+                    && x < cmp::max(inner_box.0.0, inner_box.1.0)
+                    && y > cmp::min(inner_box.0.1, inner_box.1.1)
+                    && y < cmp::max(inner_box.0.1, inner_box.1.1) {
+                    continue;
+                }
                 set.insert(problem::Point(x, y));
             }
         }
@@ -155,7 +182,7 @@ impl BruteforceHoleSolver {
                                 println!(" + skipped {}...", progress);
                                 progress += 1;
                             }
-                            if vert_idx == 3 {
+                            if vert_idx == 2 {
                                 println!("  ++  skipped {}...", progress);
                                 progress += 1;
                             }
@@ -214,11 +241,11 @@ impl BruteforceHoleSolver {
             // //          vertices.len() - vert_idx, &vertices[vert_idx..]);
 
             // // println!("Running plain bruteforce to complete the task");
-            // return self.run_plain_bruteforce(self.solver.field_min, vert_idx, best_pose_score,
-            //                                  vertices, distances, bonus);
-            return self.run_bounding_box(vert_idx,
-                                         best_pose_score,
-                                         vertices, distances, bonus);
+            return self.run_plain_bruteforce(self.solver.field_min, vert_idx, best_pose_score,
+                                             vertices, distances, bonus);
+            // return self.run_bounding_box(vert_idx,
+            //                              best_pose_score,
+            //                              vertices, distances, bonus);
         }
 
         (best_pose_score, best_pose)
@@ -270,9 +297,11 @@ impl BruteforceHoleSolver {
                              vert_idx: usize,
                              vertices: &mut Vec<problem::Point>,
                              distances: &[i64],
-                             _bonus: Option<problem::PoseBonus>) -> HashSet<problem::Point>{
+                             bonus: Option<problem::PoseBonus>) -> HashSet<problem::Point>{
         let mut pointset: HashSet<problem::Point> = HashSet::new();
         let mut pointset_ready = false;
+        let total_factor = (self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64) / 1000000_f64;
+        let mut used_factor = 0_f64;
 
         // ...find all edges...
         for &problem::Edge(from_idx, to_idx) in &self.solver.problem.figure.edges {
@@ -284,7 +313,12 @@ impl BruteforceHoleSolver {
             else if to_idx == vert_idx {
                 idx = from_idx;
             }
-            else { continue; }
+            else {
+                let d_before = distances[from_idx * vertices.len() + to_idx];
+                let d_after = problem::distance(&vertices[from_idx], &vertices[to_idx]);
+                used_factor += (d_after as f64 / d_before as f64 - 1_f64).abs();
+                continue;
+            }
 
             // ...starting from it.
             if idx > vert_idx {
@@ -293,15 +327,35 @@ impl BruteforceHoleSolver {
             }
 
             // TODO: here we need support for globalist, superflex, and other shit like that
-            let edge_budget = distances[vert_idx * vertices.len() + idx] * 2;
+            // let edge_budget = distances[vert_idx * vertices.len() + idx] * 2;
+            let edge_distance = distances[vert_idx * vertices.len() + idx];
 
+            let (edge_distance_min, edge_distance_max) = match bonus {
+                Some(problem::PoseBonus::Globalist {..}) => {
+                    let left_factor = total_factor - used_factor;
+                    let min = (edge_distance as f64 - edge_distance as f64 * left_factor).floor() as i64;
+                    let max = (edge_distance as f64 + edge_distance as f64 * left_factor).ceil() as i64;
+                    (cmp::min(0, min), max)
+                },
+                _ => {
+                    // let eps_factor = self.solver.problem.epsilon as f64 / 1000000_f64;
+                    let min = (edge_distance as f64 - (edge_distance as f64 * self.solver.problem.epsilon as f64) / 1000000_f64).floor() as i64;
+                    let max = (edge_distance as f64 + (edge_distance as f64 * self.solver.problem.epsilon as f64) / 1000000_f64).ceil() as i64;
+                    (cmp::min(0, min), max)
+                },
+            };
+
+            // let edge_distance_min = distances[vert_idx * vertices.len() + idx] - (distances[vert_idx * vertices.len() + idx] as f64 * 0.2).floor() as i64;
+            // let edge_distance_max = distances[vert_idx * vertices.len() + idx] + (distances[vert_idx * vertices.len() + idx] as f64 * 0.2).ceil() as i64;
+
+            let next_pointset = self.points_within_distance(vertices[idx], edge_distance_min, edge_distance_max);
             if !pointset_ready {
-                pointset = self.points_within_distance(vertices[idx], edge_budget);
+                pointset = next_pointset;
                 pointset_ready = true;
             }
             else {
                 pointset = pointset
-                    .intersection(&self.points_within_distance(vertices[idx], edge_budget))
+                    .intersection(&next_pointset)
                     .cloned()
                     .collect();
             }
@@ -311,15 +365,20 @@ impl BruteforceHoleSolver {
         pointset
     }
 
-    fn points_within_distance(&self, point: problem::Point, distance: i64) -> HashSet<problem::Point>{
+    fn points_within_distance(&self, point: problem::Point, distance_min: i64, distance_max: i64) -> HashSet<problem::Point>{
         // IMPORTANT: `distance` is SQUARE distance
-        let length = (distance as f64).sqrt() as i64 + 1; // +1 just to be sure :)
+        let length_min = (distance_min as f64).sqrt() as i64 - 1; // -1 just to be sure :)
+        let length_max = (distance_max as f64).sqrt() as i64 + 1; // +1 just to be sure :)
 
-        let pointset = BoundingBox(problem::Point(point.0 - length, point.1 - length),
-                                   problem::Point(point.0 + length, point.1 + length))
+        let outer_box = BoundingBox(problem::Point(point.0 - length_max, point.1 - length_max),
+                                    problem::Point(point.0 + length_max, point.1 + length_max));
+
+        let inner_box = BoundingBox(problem::Point(point.0 - length_min, point.1 - length_min),
+                                    problem::Point(point.0 + length_min, point.1 + length_min));
+
+
+        let pointset = BoundingRingBox(outer_box, inner_box)
             .point_set();
-
-        // println!("points_within_distance({:?}, {}): {:?}", point, distance, pointset);
 
         pointset
     }
@@ -483,5 +542,27 @@ impl BruteforceHoleSolver {
         }
 
         (best_score, new_pose)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounding_ring_box() {
+        let outer = BoundingBox(problem::Point(0,0), problem::Point(4,4));
+        let inner = BoundingBox(problem::Point(1,1), problem::Point(3,3));
+
+        let ring = BoundingRingBox(outer, inner);
+
+        let right = [
+            problem::Point(0,0), problem::Point(1,0), problem::Point(2,0), problem::Point(3,0), problem::Point(4,0),
+            problem::Point(0,1), problem::Point(1,1), problem::Point(2,1), problem::Point(3,1), problem::Point(4,1),
+            problem::Point(0,2), problem::Point(1,2),                      problem::Point(3,2), problem::Point(4,2),
+            problem::Point(0,3), problem::Point(1,3), problem::Point(2,3), problem::Point(3,3), problem::Point(4,3),
+            problem::Point(0,4), problem::Point(1,4), problem::Point(2,4), problem::Point(3,4), problem::Point(4,4),
+            ];
+        assert_eq!(ring.point_set(), right.iter().cloned().collect());
     }
 }
