@@ -7,6 +7,8 @@ ICFP Programming Contest 2021
 
 **ICFPC 2021 solution for team Skobochka.**
 
+Position 47 in scoreboard after freeze with 602880 points and all 132 problems solved.
+
 ---
 
 You can find the following projects in the repository:
