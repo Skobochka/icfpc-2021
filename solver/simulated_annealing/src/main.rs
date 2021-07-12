@@ -98,6 +98,7 @@ fn main() -> Result<(), Error> {
                         target_problem: problem::ProblemId(problem_id),
                     },
                 None =>
+                    // solver::simulated_annealing::OperatingMode::ZeroHunter,
                     solver::simulated_annealing::OperatingMode::ScoreMaximizer,
             },
         },
@@ -110,7 +111,11 @@ fn main() -> Result<(), Error> {
             Ok(()) =>
                 (),
             Err(solver::simulated_annealing::StepError::TempTooLow) if reheats_count < cli_args.max_reheats_count => {
-                log::info!("temperature is too low: performing reheat ({} left)", cli_args.max_reheats_count - reheats_count);
+                log::info!(
+                    "temperature is too low: performing reheat ({} left), fitness = {:?}",
+                    cli_args.max_reheats_count - reheats_count,
+                    solver.fitness(),
+                );
                 solver.reheat(cli_args.reheat_factor);
                 reheats_count += 1;
             },
