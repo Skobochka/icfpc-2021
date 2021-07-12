@@ -795,6 +795,43 @@ mod tests {
         ).unwrap();
 
         assert!(problem_92.score_pose(&pose_92).is_err());
+    }
 
+    #[test]
+    fn score_vertice_wallhack_synthetic() {
+        let problem_2_outer: Problem = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"GLOBALIST","problem":46,"position":[20,20]},{"bonus":"BREAK_A_LEG","problem":88,"position":[30,30]},{"bonus":"GLOBALIST","problem":20,"position":[30,12]}],"hole":[[20,0],[40,20],[20,40],[0,20]],"epsilon":2494,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[15,21],[34,0],[0,45],[19,24]]}}"#,
+        ).unwrap();
+        let pose_2_outer: Pose = serde_json::from_str(
+            r#"{"vertices":[[15,21],[34,0],[0,45],[19,24]],"bonuses":[{"bonus":"WALLHACK","problem":999}]}"#,
+        ).unwrap();
+
+        assert!(problem_2_outer.score_pose(&pose_2_outer).is_err());
+
+        let problem_1_outer: Problem = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"GLOBALIST","problem":46,"position":[20,20]},{"bonus":"BREAK_A_LEG","problem":88,"position":[30,30]},{"bonus":"GLOBALIST","problem":20,"position":[30,12]}],"hole":[[20,0],[40,20],[20,40],[0,20]],"epsilon":2494,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[15,21],[34,0],[15,15],[19,24]]}}"#,
+        ).unwrap();
+
+        let pose_1_outer_no_bonus: Pose = serde_json::from_str(
+            r#"{"vertices":[[15,21],[34,0],[15,15],[19,24]],"bonuses":null}"#,
+        ).unwrap();
+        assert!(problem_1_outer.score_pose(&pose_1_outer_no_bonus).is_err());
+
+        let pose_1_outer_wallhack: Pose = serde_json::from_str(
+            r#"{"vertices":[[15,21],[34,0],[15,15],[19,24]],"bonuses":[{"bonus":"WALLHACK","problem":999}]}"#,
+        ).unwrap();
+        assert!(problem_1_outer.score_pose(&pose_1_outer_wallhack).is_ok());
+
+        let problem_2_outer_same: Problem = serde_json::from_str(
+            r#"{"bonuses":[{"bonus":"GLOBALIST","problem":46,"position":[20,20]},{"bonus":"BREAK_A_LEG","problem":88,"position":[30,30]},{"bonus":"GLOBALIST","problem":20,"position":[30,12]}],"hole":[[20,0],[40,20],[20,40],[0,20]],"epsilon":2494,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[15,21],[34,0],[34,0],[19,24]]}}"#,
+        ).unwrap();
+        let pose_2_outer_same_nobonus: Pose = serde_json::from_str(
+            r#"{"vertices":[[15,21],[34,0],[34,0],[19,24]],"bonuses":null}"#,
+        ).unwrap();
+        assert!(problem_2_outer_same.score_pose(&pose_2_outer_same_nobonus).is_err());
+        let pose_2_outer_same_wallhack: Pose = serde_json::from_str(
+            r#"{"vertices":[[15,21],[34,0],[34,0],[19,24]],"bonuses":[{"bonus":"WALLHACK","problem":999}]}"#,
+        ).unwrap();
+        assert!(problem_2_outer_same.score_pose(&pose_2_outer_same_wallhack ).is_err());
     }
 }
