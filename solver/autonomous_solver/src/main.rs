@@ -82,7 +82,7 @@ pub enum Error {
 }
 
 fn main() -> Result<(), Error> {
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
     let cli_args = CliArgs::from_args();
     log::info!("program starts as: {:?}", cli_args);
 
@@ -248,6 +248,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             }
         };
         match (&temporary_best_solution, &best_solution) {
+            // (&Some((_, score)), &None) {  // TODO as well as below
             (&Some((_, score)), &Some((_, best_score))) if score < best_score => {
                 // we are lucky
                 best_solution = temporary_best_solution;
@@ -292,6 +293,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
     }
 
     if let Some((pose, score)) = best_solution {
+        log::info!("pose with score {} for task {} has been written to {:?}", score, problem_desc.task_id, problem_desc.problem_file);
         pose.write_to_file(&problem_desc.pose_file)
             .map_err(Error::PoseExport)?;
 
@@ -389,6 +391,10 @@ fn slave_run_task_with(
                 log::error!("probably infinite loop in moved vertex for task {}, stopping", problem_desc.task_id);
                 break;
             },
+            Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInFrozenIndex) => {
+                log::error!("probably infinite loop in frozen index for task {}, stopping", problem_desc.task_id);
+                break;
+            },
         }
         match solver.fitness() {
             solver::simulated_annealing::Fitness::FigureScored { score, } =>
@@ -409,10 +415,9 @@ fn slave_run_task_with(
                         },
                     };
                     log::info!(
-                        "SCORE: {} | new best solution found for task {}, pose has been written to {:?}",
+                        "SCORE: {} | new best solution found for task {}",
                         score,
                         problem_desc.task_id,
-                        problem_desc.pose_file,
                     );
                     *best_solution = Some((pose, score));
                 },

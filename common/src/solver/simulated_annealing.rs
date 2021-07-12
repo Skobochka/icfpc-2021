@@ -49,6 +49,7 @@ pub enum StepError {
     TempTooLow,
     ProbablyInfiniteLoopInVertexIndex,
     ProbablyInfiniteLoopInMovedVertex,
+    ProbablyInfiniteLoopInFrozenIndex,
 }
 
 impl SimulatedAnnealingSolver {
@@ -107,7 +108,13 @@ impl SimulatedAnnealingSolver {
         for _ in 0 .. self.params.iterations_per_cooling_step {
             if !self.frozen_vertices_indices.is_empty() && rng.gen_range(0.0 .. 1.0) < self.params.frozen_swap_prob {
                 let frozen_index = rng.gen_range(0 .. self.frozen_vertices_indices.len());
+                let mut counter = 0;
                 let pose_vertices_index = loop {
+                    counter += 1;
+                    if counter > 10000000 {
+                        return Err(StepError::ProbablyInfiniteLoopInFrozenIndex);
+                    }
+
                     let index = rng.gen_range(0 .. self.vertices_tmp.len());
                     if !self.frozen_vertices_indices.contains(&index) {
                         break index;
