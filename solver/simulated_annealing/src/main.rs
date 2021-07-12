@@ -45,6 +45,7 @@ pub struct CliArgs {
 pub enum Error {
     ProblemLoad(problem::FromFileError),
     SolverCreate(solver::CreateError),
+    SimulatedAnnealingSolverCreate(solver::simulated_annealing::CreateError),
     PoseExport(problem::WriteFileError),
     IncorrectBonus(serde_json::Error),
 }
@@ -100,7 +101,7 @@ fn main() -> Result<(), Error> {
                     solver::simulated_annealing::OperatingMode::ScoreMaximizer,
             },
         },
-    );
+    ).map_err(Error::SimulatedAnnealingSolverCreate)?;
 
     let mut reheats_count = 0;
     let mut best_solution = None;
@@ -123,6 +124,28 @@ fn main() -> Result<(), Error> {
             },
             Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInMovedVertex) => {
                 log::error!("probably infinite loop in moved vertex stopping");
+                return Ok(());
+            },
+            Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInFrozenIndex) => {
+                log::error!("probably infinite loop in frozen index, stopping");
+                return Ok(());
+            },
+            Err(solver::simulated_annealing::StepError::GenerateVertices(
+                solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusCollector,
+            )) => {
+                log::error!("probably infinite loop in generate vertices for bonus collector, stopping");
+                return Ok(());
+            },
+            Err(solver::simulated_annealing::StepError::GenerateVertices(
+                solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusHunter,
+            )) => {
+                log::error!("probably infinite loop in generate vertices for bonus hunter, stopping");
+                return Ok(());
+            },
+            Err(solver::simulated_annealing::StepError::GenerateVertices(
+                solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInZeroHunter,
+            )) => {
+                log::error!("probably infinite loop in generate vertices for zero hunter, stopping");
                 return Ok(());
             },
         }

@@ -50,18 +50,25 @@ pub enum StepError {
     ProbablyInfiniteLoopInVertexIndex,
     ProbablyInfiniteLoopInMovedVertex,
     ProbablyInfiniteLoopInFrozenIndex,
+    GenerateVertices(GenerateVerticesError),
+}
+
+#[derive(Debug)]
+pub enum CreateError {
+    GenerateVertices(GenerateVerticesError),
 }
 
 impl SimulatedAnnealingSolver {
-    pub fn new(solver: solver::Solver, params: Params) -> SimulatedAnnealingSolver {
+    pub fn new(solver: solver::Solver, params: Params) -> Result<SimulatedAnnealingSolver, CreateError> {
         let mut vertices_cur = Vec::new();
         let mut frozen_vertices_indices = Vec::new();
-        generate_vertices(&solver, &mut vertices_cur, &mut frozen_vertices_indices, params.operating_mode);
+        generate_vertices(&solver, &mut vertices_cur, &mut frozen_vertices_indices, params.operating_mode)
+            .map_err(CreateError::GenerateVertices)?;
 
         let temp = params.max_temp;
         let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur, &solver.use_bonus);
 
-        SimulatedAnnealingSolver {
+        Ok(SimulatedAnnealingSolver {
             solver,
             params,
             vertices_cur,
@@ -70,14 +77,15 @@ impl SimulatedAnnealingSolver {
             fitness_cur,
             temp,
             steps: 0,
-        }
+        })
     }
 
-    pub fn reset(&mut self) {
-        generate_vertices(&self.solver, &mut self.vertices_cur, &mut self.frozen_vertices_indices, self.params.operating_mode);
+    pub fn reset(&mut self) -> Result<(), GenerateVerticesError> {
+        generate_vertices(&self.solver, &mut self.vertices_cur, &mut self.frozen_vertices_indices, self.params.operating_mode)?;
         self.temp = self.params.max_temp;
         self.steps = 0;
         self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur, &self.solver.use_bonus);
+        Ok(())
     }
 
     pub fn reheat(&mut self, temp_factor: f64) {
@@ -244,12 +252,20 @@ impl SimulatedAnnealingSolver {
     }
 }
 
+#[derive(Debug)]
+pub enum GenerateVerticesError {
+    ProbablyInfiniteLoopInFrozenIndexInBonusCollector,
+    ProbablyInfiniteLoopInFrozenIndexInBonusHunter,
+    ProbablyInfiniteLoopInFrozenIndexInZeroHunter,
+}
+
 fn generate_vertices(
     solver: &solver::Solver,
     vertices: &mut Vec<problem::Point>,
     frozen_vertices_indices: &mut Vec<usize>,
     operating_mode: OperatingMode,
 )
+    -> Result<(), GenerateVerticesError>
 {
     let figure_vertices_iter = solver
         .problem
@@ -276,12 +292,18 @@ fn generate_vertices(
             (),
         OperatingMode::BonusCollector { target_problem, } =>
             match &solver.problem.bonuses {
-                Some(bonuses) if !bonuses.is_empty() => {
+                Some(bonuses) if bonuses.is_empty() => {
                     for bonus in bonuses {
                         if bonus.problem != target_problem {
                             continue;
                         }
+                        let mut count = 0;
                         let frozen_vertex_index = loop {
+                            count += 1;
+                            if count > 10000000 {
+                                return Err(GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusCollector);
+                            }
+
                             let index = rng.gen_range(0 .. vertices.len());
                             if !frozen_vertices_indices.contains(&index) {
                                 break index;
@@ -298,7 +320,12 @@ fn generate_vertices(
             match &solver.problem.bonuses {
                 Some(bonuses) if !bonuses.is_empty() => {
                     for bonus in bonuses {
+                        let mut count = 0;
                         let frozen_vertex_index = loop {
+                            count += 1;
+                            if count > 10000000 {
+                                return Err(GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusHunter);
+                            }
                             let index = rng.gen_range(0 .. vertices.len());
                             if !frozen_vertices_indices.contains(&index) {
                                 break index;
@@ -313,7 +340,12 @@ fn generate_vertices(
             },
         OperatingMode::ZeroHunter =>
             for &hole_vertex in &solver.problem.hole {
+                let mut count = 0;
                 let frozen_vertex_index = loop {
+                    count += 1;
+                    if count > 10000000 {
+                        return Err(GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInZeroHunter);
+                    }
                     let index = rng.gen_range(0 .. vertices.len());
                     if !frozen_vertices_indices.contains(&index) {
                         break index;
@@ -323,6 +355,7 @@ fn generate_vertices(
                 vertices[frozen_vertex_index] = hole_vertex;
             },
     }
+    Ok(())
 }
 
 impl Fitness {

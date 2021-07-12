@@ -72,6 +72,7 @@ pub enum Error {
     PoseLoad(problem::FromFileError),
     LoadPoseInvalidContent { pose_file: PathBuf, error: problem::PoseValidationError, },
     SolverCreate(solver::CreateError),
+    SimulatedAnnealingSolverCreate(solver::simulated_annealing::CreateError),
     PoseExport(problem::WriteFileError),
     PoseSerialize(serde_json::Error),
     WorkerSpawn(io::Error),
@@ -344,7 +345,7 @@ fn slave_run_task_with(
         operating_mode,
     );
 
-    let mut solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
+    let maybe_solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
         solver::Solver::with_bonus(problem, best_solution.as_ref().map(|best| best.0.clone()), use_bonus.map(|ub| ub.0))
             .map_err(Error::SolverCreate)?,
         solver::simulated_annealing::Params {
@@ -357,6 +358,29 @@ fn slave_run_task_with(
             operating_mode,
         },
     );
+
+    let mut solver = match maybe_solver {
+        Ok(solver) =>
+            solver,
+        Err(solver::simulated_annealing::CreateError::GenerateVertices(
+            solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusCollector,
+        )) => {
+            log::error!("probably infinite loop in generate vertices for bonus collector for task {}, stopping", problem_desc.task_id);
+            return Ok(());
+        },
+        Err(solver::simulated_annealing::CreateError::GenerateVertices(
+            solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusHunter,
+        )) => {
+            log::error!("probably infinite loop in generate vertices for bonus hunter for task {}, stopping", problem_desc.task_id);
+            return Ok(());
+        },
+        Err(solver::simulated_annealing::CreateError::GenerateVertices(
+            solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInZeroHunter,
+        )) => {
+            log::error!("probably infinite loop in generate vertices for zero hunter for task {}, stopping", problem_desc.task_id);
+            return Ok(());
+        },
+    };
 
     let solving_start_time = time::Instant::now();
 
@@ -393,6 +417,24 @@ fn slave_run_task_with(
             },
             Err(solver::simulated_annealing::StepError::ProbablyInfiniteLoopInFrozenIndex) => {
                 log::error!("probably infinite loop in frozen index for task {}, stopping", problem_desc.task_id);
+                break;
+            },
+            Err(solver::simulated_annealing::StepError::GenerateVertices(
+                solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusCollector,
+            )) => {
+                log::error!("probably infinite loop in generate vertices for bonus collector for task {}, stopping", problem_desc.task_id);
+                break;
+            },
+            Err(solver::simulated_annealing::StepError::GenerateVertices(
+                solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInBonusHunter,
+            )) => {
+                log::error!("probably infinite loop in generate vertices for bonus hunter for task {}, stopping", problem_desc.task_id);
+                break;
+            },
+            Err(solver::simulated_annealing::StepError::GenerateVertices(
+                solver::simulated_annealing::GenerateVerticesError::ProbablyInfiniteLoopInFrozenIndexInZeroHunter,
+            )) => {
+                log::error!("probably infinite loop in generate vertices for zero hunter for task {}, stopping", problem_desc.task_id);
                 break;
             },
         }
