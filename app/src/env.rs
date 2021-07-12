@@ -513,7 +513,7 @@ impl Env {
         -> Result<(), SimulatedAnnealingSolverError>
     {
         let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-            solver::Solver::new(&self.problem, Some(self.problem.export_pose()))
+            solver::Solver::with_bonus(&self.problem, Some(self.problem.export_pose()), Some(problem::ProblemBonusType::Wallhack))
                 .map_err(SimulatedAnnealingSolverError::SolverCreate)?,
             solver::simulated_annealing::Params {
                 max_temp: 100.0,

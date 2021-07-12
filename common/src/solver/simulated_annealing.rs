@@ -206,8 +206,20 @@ impl SimulatedAnnealingSolver {
                         Some(problem::ProblemBonusType::Globalist) |
                         Some(problem::ProblemBonusType::Superflex) =>
                             self.solver.is_hole(&try_vertex),
-                        Some(problem::ProblemBonusType::Wallhack) =>
-                            true,
+                        Some(problem::ProblemBonusType::Wallhack) => {
+                            let mut already_has_outside = false;
+                            for vertex in &self.vertices_tmp {
+                                if !self.solver.is_hole(vertex) {
+                                    already_has_outside = true;
+                                    break;
+                                }
+                            }
+                            if already_has_outside {
+                                self.solver.is_hole(&try_vertex)
+                            } else {
+                                true
+                            }
+                        },
                     };
 
                     if try_vertex != vertex && allow_hole {
