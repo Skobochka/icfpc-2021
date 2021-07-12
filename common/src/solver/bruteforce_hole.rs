@@ -16,6 +16,8 @@ use crate::{
 #[allow(dead_code)]
 pub struct BruteforceHoleSolver {
     solver: solver::Solver,
+    distances: Vec<i64>,
+    bonus: Option<problem::PoseBonus>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -36,60 +38,38 @@ impl BoundingBox {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct BoundingRingBox(BoundingBox, BoundingBox);
-
-impl BoundingRingBox {
-    pub fn point_set(&self) -> HashSet<problem::Point> {
-        let outer_box = &self.0;
-        let inner_box = &self.1;
-
-        let capacity = ((outer_box.0.0 - outer_box.1.0).abs() * (outer_box.0.1 - outer_box.1.1).abs()) as usize;
-        let mut set = HashSet::with_capacity(capacity);
-
-        for x in cmp::max(0, cmp::min(outer_box.0.0, outer_box.1.0))..=cmp::max(outer_box.0.0, outer_box.1.0) {
-            for y in cmp::max(0, cmp::min(outer_box.0.1, outer_box.1.1))..=cmp::max(outer_box.0.1, outer_box.1.1) {
-                if x > cmp::min(inner_box.0.0, inner_box.1.0)
-                    && x < cmp::max(inner_box.0.0, inner_box.1.0)
-                    && y > cmp::min(inner_box.0.1, inner_box.1.1)
-                    && y < cmp::max(inner_box.0.1, inner_box.1.1) {
-                    continue;
-                }
-                set.insert(problem::Point(x, y));
-            }
-        }
-
-        set
-    }
-}
-
 impl BruteforceHoleSolver {
     pub fn new(solver: solver::Solver) -> BruteforceHoleSolver {
         BruteforceHoleSolver {
+            distances: solver.problem.distance_cache(),
+            bonus: solver.pose.bonus(),
             solver,
         }
     }
 
+    // pub fn solve(&self) -> Option<problem::Pose> {
+    //     let mut vertices = self.solver.problem.figure.vertices.clone();
+    //     let hole = HashSet::from_iter(self.solver.problem.hole.iter().cloned());
+    //     let distances = self.solver.problem.distance_cache();
+
+    //     println!("Bruteforce of hole size {} for figure size {} with bonus {:?}...", hole.len(), vertices.len(), self.solver.pose.bonus());
+    //     match self.solver.pose.bonus() {
+    //         Some(problem::PoseBonus::Globalist {..}) => {
+    //             println!("GLOBALIST bonus detected. Max ratio is: {}", (self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64) / 1000000_f64);
+    //         }
+    //         _ => {},
+    //     };
+
+    //     let (score, pose) = self.run(0,  i64::MAX, &mut vertices, hole, &distances, self.solver.pose.bonus());
+    //     match pose {
+    //         None => println!("Solution not found..."),
+    //         Some(ref pose) => println!("Found solution with score {:?}: {:?}", score, pose),
+    //     };
+    //     pose
+    // }
+
     pub fn solve(&self) -> Option<problem::Pose> {
-        let mut vertices = self.solver.problem.figure.vertices.clone();
-        let hole = HashSet::from_iter(self.solver.problem.hole.iter().cloned());
-        let mut distances = vec![-1; vertices.len() * vertices.len()];
-
-        for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
-            let distance = problem::distance(&vertices[from_idx], &vertices[to_idx]);
-            distances[from_idx*vertices.len() + to_idx] = distance;
-            distances[to_idx*vertices.len() + from_idx] = distance;
-        }
-
-        println!("Bruteforce of hole size {} for figure size {} with bonus {:?}...", hole.len(), vertices.len(), self.solver.pose.bonus());
-        match self.solver.pose.bonus() {
-            Some(problem::PoseBonus::Globalist {..}) => {
-                println!("GLOBALIST bonus detected. Max ratio is: {}", (self.solver.problem.figure.edges.len() as f64 * self.solver.problem.epsilon as f64) / 1000000_f64);
-            }
-            _ => {},
-        };
-
-        let (score, pose) = self.run(0, i64::MAX, &mut vertices, hole, &distances, self.solver.pose.bonus());
+        let (score, pose) = self.solve_dancing();
         match pose {
             None => println!("Solution not found..."),
             Some(ref pose) => println!("Found solution with score {:?}: {:?}", score, pose),
@@ -97,12 +77,144 @@ impl BruteforceHoleSolver {
         pose
     }
 
-    fn run(&self, vert_idx: usize,
-           last_best_score: i64,
+    fn solve_dancing(&self) -> (i64, Option<problem::Pose>) {
+        let mut best_pose_score = i64::MAX;
+        let mut best_pose = None;
+
+        for start_idx in 0..self.solver.problem.figure.vertices.len() {
+            let mut vertices = self.solver.problem.figure.vertices.clone();
+            let mut vertices_placed = bit_vec::BitVec::from_elem(vertices.len(), false);
+            /* The first point is picked from the hole */
+            println!("looking from vertex {}", start_idx);
+            let (new_score, new_pose) = self.place_vertex(start_idx, &mut vertices, &mut vertices_placed,
+                                                          /* we always start from hole point */
+                                                          HashSet::from_iter(self.solver.problem.hole.iter().cloned()));
+            if new_score == 0 {
+                /* found ideal solution, no need to continue */
+                return (new_score, new_pose);
+            }
+            else if new_score < best_pose_score {
+                best_pose_score = new_score;
+                best_pose = new_pose;
+            }
+        }
+
+        (best_pose_score, best_pose)
+    }
+
+    fn place_vertex(&self,
+                    idx: usize,
+                    vertices: &mut Vec<problem::Point>,
+                    vertices_placed: &mut bit_vec::BitVec,
+                    candidates: HashSet<problem::Point>,
+                    )  -> (i64, Option<problem::Pose>) {
+        // println!("place_vertex({}, {:?}, {:?}, {:?}) called", idx, vertices, vertices_placed, candidates.len());
+        let mut best_pose_score = i64::MAX;
+        let mut best_pose = None;
+
+        let candidates_count = candidates.len();
+        'next_point: for point in candidates {
+            let mut next_vertice_idxs = Vec::with_capacity(vertices.len());
+
+            for &problem::Edge(from_idx, to_idx) in &self.solver.problem.figure.edges {
+                if from_idx != idx {
+                    continue;
+                }
+
+                let d_before = self.distances[idx * vertices.len() + to_idx];
+                if vertices_placed[to_idx] {
+                    /* This point is already placed, checking distances */
+                    let d_after = problem::distance(&point, &vertices[to_idx]);
+
+                    match self.bonus {
+                        Some(problem::PoseBonus::Globalist {..}) => { unimplemented!("No globalist for you!"); },
+                        _ => {
+                            if ((d_after as f64 / d_before as f64) - 1_f64).abs() > self.solver.problem.epsilon as f64 / 1000000_f64 {
+                                continue 'next_point; /* edge would be too long */
+                            }
+                        }
+                    }
+                }
+                else {
+                    /* save idx to continue later */
+                    next_vertice_idxs.push(to_idx);
+                }
+            }
+
+            /* now actually place the vertex */
+            vertices[idx] = point;
+            vertices_placed.set(idx, true);
+
+            // if idx == 0 {
+            //     println!("next_vertice_idxs: {:?}", next_vertice_idxs);
+            // }
+            // if idx == 2 {
+            //     println!("for vertex 2 processing candidates {}, placed: {:?}", candidates_count, vertices_placed);
+            // }
+            // if next_vertice_idxs.is_empty() {
+            //     println!("next_vertice_idxs is empty, idx: {} placed: {:?}", idx, vertices_placed);
+            // }
+            /* place adjustment vertices */
+            for next_idx in next_vertice_idxs {
+                /* building candidate set. possible locations for the rib... */
+                let edge_distance = self.distances[idx * vertices.len() + next_idx];
+                let new_candidates = match self.bonus {
+                    Some(problem::PoseBonus::Globalist {..}) => { unimplemented!("No globalist for you!"); },
+                    _ => {
+                        let min = (edge_distance as f64 - (edge_distance as f64 * self.solver.problem.epsilon as f64) / 1000000_f64).floor() as i64;
+                        let max = (edge_distance as f64 + (edge_distance as f64 * self.solver.problem.epsilon as f64) / 1000000_f64).ceil() as i64;
+                        self.points_within_distance(point, min, max)
+                    }
+                }.union(&HashSet::from_iter(self.solver.problem.hole.iter().cloned())).cloned().collect();
+
+                let (new_score, new_pose) = self.place_vertex(next_idx, vertices, vertices_placed, new_candidates);
+                if new_score == 0 {
+                    /* found ideal solution, no need to continue */
+                    return (new_score, new_pose);
+                }
+                else if new_score < best_pose_score {
+                    best_pose_score = new_score;
+                    best_pose = new_pose;
+                }
+            }
+            // println!("huh: {:?}", vertices_placed);
+
+            if vertices_placed.all() {
+                let (new_score, new_pose) = match self.solver.problem.score_vertices(vertices, self.bonus) {
+                    Ok(score) => (score, Some(problem::Pose {
+                        vertices: vertices.clone(),
+                        bonuses: self.bonus.map(|b| vec![b]),
+                    })),
+                    Err(_) => (i64::MAX, None),
+                };
+
+                if new_score == 0 {
+                    /* found ideal solution, no need to continue */
+                    return (new_score, new_pose);
+                }
+                else if new_score < best_pose_score {
+                    best_pose_score = new_score;
+                    best_pose = new_pose;
+                }
+            }
+
+            /* 'unplace' the vertex */
+            vertices_placed.set(idx, false);
+
+        }
+        // println!("place_vertex({}, {:?}, {:?}) exit", idx, vertices, vertices_placed);
+        (best_pose_score, best_pose)
+    }
+
+
+    fn run(&self,
+           vert_idx: usize, last_best_score: i64,
            vertices: &mut Vec<problem::Point>,
            hole: HashSet<problem::Point>,
            distances: &[i64],
            bonus: Option<problem::PoseBonus>) -> (i64, Option<problem::Pose>) {
+
+
         let mut best_pose_score = last_best_score;
         let mut best_pose = None;
         let mut progress = 1;
@@ -122,12 +234,28 @@ impl BruteforceHoleSolver {
                 Some(problem::PoseBonus::Globalist {..}) => {
                     let mut eps = 0_f64;
                     for &problem::Edge(from_idx, to_idx) in self.solver.problem.figure.edges.iter() {
-                        if from_idx != vert_idx {
+                        let idx: usize;
+                        if from_idx == vert_idx {
+                            idx = to_idx;
+                        }
+                        else if to_idx == vert_idx {
+                            idx = from_idx;
+                        }
+                        else {
                             continue;
                         }
-                        if to_idx >= vert_idx {
+
+                        // ...starting from it.
+                        if idx > vert_idx {
+                            /* This point not yet placed, ignore it */
                             continue;
                         }
+                        // if from_idx != vert_idx {
+                        //     continue;
+                        // }
+                        // if to_idx >= vert_idx {
+                        //     continue;
+                        // }
 
                         let d_before = problem::distance(&self.solver.problem.figure.vertices[from_idx], &self.solver.problem.figure.vertices[to_idx]);
                         let d_after = problem::distance(&hole_vertice, &vertices[to_idx]);
@@ -237,15 +365,16 @@ impl BruteforceHoleSolver {
         }
 
         if hole.is_empty() {
-            // // println!("Hole bruteforce reached its end. We have {} vertices left: {:?}",
-            // //          vertices.len() - vert_idx, &vertices[vert_idx..]);
+            // println!("Hole bruteforce reached its end. We have {} vertices left: {:?}.",
+            //          vertices.len() - vert_idx, &vertices[vert_idx..]);
+            println!("Full vertices now: {:?}", vertices);
 
             // // println!("Running plain bruteforce to complete the task");
-            return self.run_plain_bruteforce(self.solver.field_min, vert_idx, best_pose_score,
-                                             vertices, distances, bonus);
-            // return self.run_bounding_box(vert_idx,
-            //                              best_pose_score,
-            //                              vertices, distances, bonus);
+            // return self.run_plain_bruteforce(self.solver.field_min, vert_idx, best_pose_score,
+            //                                  vertices, distances, bonus);
+            return self.run_bounding_box(vert_idx,
+                                         best_pose_score,
+                                         vertices, distances, bonus);
         }
 
         (best_pose_score, best_pose)
@@ -371,14 +500,14 @@ impl BruteforceHoleSolver {
         let length_min = (distance_min as f64).sqrt() as i64 - 1; // -1 just to be sure :)
         let length_max = (distance_max as f64).sqrt() as i64 + 1; // +1 just to be sure :)
 
-        let outer_box = BoundingBox(problem::Point(point.0 - length_max, point.1 - length_max),
-                                    problem::Point(point.0 + length_max, point.1 + length_max));
+        let outer_box = problem::BoundingBox(problem::Point(point.0 - length_max, point.1 - length_max),
+                                             problem::Point(point.0 + length_max, point.1 + length_max));
 
-        let inner_box = BoundingBox(problem::Point(point.0 - length_min, point.1 - length_min),
-                                    problem::Point(point.0 + length_min, point.1 + length_min));
+        let inner_box = problem::BoundingBox(problem::Point(point.0 - length_min, point.1 - length_min),
+                                             problem::Point(point.0 + length_min, point.1 + length_min));
 
 
-        let pointset = BoundingRingBox(outer_box, inner_box)
+        let pointset = problem::SquareRing(outer_box, inner_box)
             .point_set();
 
         pointset
@@ -546,24 +675,24 @@ impl BruteforceHoleSolver {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    #[test]
-    fn bounding_ring_box() {
-        let outer = BoundingBox(problem::Point(0,0), problem::Point(4,4));
-        let inner = BoundingBox(problem::Point(1,1), problem::Point(3,3));
+//     #[test]
+//     fn bounding_ring_box() {
+//         let outer = BoundingBox(problem::Point(0,0), problem::Point(4,4));
+//         let inner = BoundingBox(problem::Point(1,1), problem::Point(3,3));
 
-        let ring = BoundingRingBox(outer, inner);
+//         let ring = BoundingRingBox(outer, inner);
 
-        let right = [
-            problem::Point(0,0), problem::Point(1,0), problem::Point(2,0), problem::Point(3,0), problem::Point(4,0),
-            problem::Point(0,1), problem::Point(1,1), problem::Point(2,1), problem::Point(3,1), problem::Point(4,1),
-            problem::Point(0,2), problem::Point(1,2),                      problem::Point(3,2), problem::Point(4,2),
-            problem::Point(0,3), problem::Point(1,3), problem::Point(2,3), problem::Point(3,3), problem::Point(4,3),
-            problem::Point(0,4), problem::Point(1,4), problem::Point(2,4), problem::Point(3,4), problem::Point(4,4),
-            ];
-        assert_eq!(ring.point_set(), right.iter().cloned().collect());
-    }
-}
+//         let right = [
+//             problem::Point(0,0), problem::Point(1,0), problem::Point(2,0), problem::Point(3,0), problem::Point(4,0),
+//             problem::Point(0,1), problem::Point(1,1), problem::Point(2,1), problem::Point(3,1), problem::Point(4,1),
+//             problem::Point(0,2), problem::Point(1,2),                      problem::Point(3,2), problem::Point(4,2),
+//             problem::Point(0,3), problem::Point(1,3), problem::Point(2,3), problem::Point(3,3), problem::Point(4,3),
+//             problem::Point(0,4), problem::Point(1,4), problem::Point(2,4), problem::Point(3,4), problem::Point(4,4),
+//             ];
+//         assert_eq!(ring.point_set(), right.iter().cloned().collect());
+//     }
+// }

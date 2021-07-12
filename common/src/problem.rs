@@ -270,6 +270,7 @@ impl Problem {
     pub fn score_vertices(&self,
                           pose_vertices: &[Point],
                           bonus: Option<PoseBonus>) -> Result<i64, PoseValidationError> {
+        println!("Scoring pose");
         self.score_vertices_check_count(pose_vertices, bonus)?;
         self.score_vertices_check_stretching(pose_vertices, bonus)?;
         self.score_vertices_check_hole(pose_vertices, bonus)?;
