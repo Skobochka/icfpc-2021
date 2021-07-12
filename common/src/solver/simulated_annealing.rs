@@ -198,11 +198,19 @@ impl SimulatedAnnealingSolver {
 
                     let x = vertex.0 + rng.gen_range(-1 ..= 1);
                     let y = vertex.1 + rng.gen_range(-1 ..= 1);
-
-                    // let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
-                    // let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
                     let try_vertex = problem::Point(x, y);
-                    if try_vertex != vertex && self.solver.is_hole(&try_vertex) {
+
+                    let allow_hole = match self.solver.use_bonus {
+                        None |
+                        Some(problem::ProblemBonusType::BreakALeg) |
+                        Some(problem::ProblemBonusType::Globalist) |
+                        Some(problem::ProblemBonusType::Superflex) =>
+                            self.solver.is_hole(&try_vertex),
+                        Some(problem::ProblemBonusType::Wallhack) =>
+                            true,
+                    };
+
+                    if try_vertex != vertex && allow_hole {
                         break try_vertex;
                     }
                 };
