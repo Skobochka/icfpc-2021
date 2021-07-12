@@ -51,7 +51,7 @@ pub enum Error {
 }
 
 fn main() -> Result<(), Error> {
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
     let cli_args = CliArgs::from_args();
     log::info!("program starts as: {:?}", cli_args);
 
