@@ -195,7 +195,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         })
         .collect();
 
-    // try unlock all bonuses, maybe we are lucky
+    // try gather zero score, maybe we are lucky
     let mut temporary_best_solution = None;
     if allowed_unlocked_bonuses.is_empty() {
         slave_run_task_with(
@@ -204,7 +204,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
             &mut temporary_best_solution,
             cli_args,
             None,
-            solver::simulated_annealing::OperatingMode::BonusHunter,
+            solver::simulated_annealing::OperatingMode::ZeroHunter,
         )?;
     } else {
         for &&unlocked_bonus in &allowed_unlocked_bonuses {
@@ -214,7 +214,7 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
                 &mut temporary_best_solution,
                 cli_args,
                 Some(unlocked_bonus),
-                solver::simulated_annealing::OperatingMode::BonusHunter,
+                solver::simulated_annealing::OperatingMode::ZeroHunter,
             )?;
         }
     };
@@ -222,40 +222,68 @@ fn slave_run_task(problem_desc: &ProblemDesc, cli_args: &CliArgs) -> Result<(), 
         // we are lucky
         best_solution = temporary_best_solution;
     } else {
-        // not this time, proceed with regular stuff
-
-        let operating_mode = if unlocked_bonuses_here.is_empty() {
-            solver::simulated_annealing::OperatingMode::ScoreMaximizer
-        } else if unlocked_bonuses_here.len() == 1 {
-            solver::simulated_annealing::OperatingMode::BonusCollector {
-                target_problem: unlocked_bonuses_here[0],
-            }
-        } else {
-            log::info!("skipping task {} because of many bonuses already unlocked", problem_desc.task_id);
-            return Ok(());
-        };
-
+        // try unlock all bonuses, maybe we are lucky
+        let mut temporary_best_solution = None;
         if allowed_unlocked_bonuses.is_empty() {
             slave_run_task_with(
                 problem_desc,
                 &problem,
-                &mut best_solution,
+                &mut temporary_best_solution,
                 cli_args,
                 None,
-                operating_mode,
+                solver::simulated_annealing::OperatingMode::BonusHunter,
             )?;
         } else {
             for &&unlocked_bonus in &allowed_unlocked_bonuses {
                 slave_run_task_with(
                     problem_desc,
                     &problem,
-                    &mut best_solution,
+                    &mut temporary_best_solution,
                     cli_args,
                     Some(unlocked_bonus),
-                    operating_mode,
+                    solver::simulated_annealing::OperatingMode::BonusHunter,
                 )?;
             }
         };
+        if temporary_best_solution.is_some() {
+            // we are lucky
+            best_solution = temporary_best_solution;
+        } else {
+            // not this time, proceed with regular stuff
+
+            let operating_mode = if unlocked_bonuses_here.is_empty() {
+                solver::simulated_annealing::OperatingMode::ScoreMaximizer
+            } else if unlocked_bonuses_here.len() == 1 {
+                solver::simulated_annealing::OperatingMode::BonusCollector {
+                    target_problem: unlocked_bonuses_here[0],
+                }
+            } else {
+                log::info!("skipping task {} because of many bonuses already unlocked", problem_desc.task_id);
+                return Ok(());
+            };
+
+            if allowed_unlocked_bonuses.is_empty() {
+                slave_run_task_with(
+                    problem_desc,
+                    &problem,
+                    &mut best_solution,
+                    cli_args,
+                    None,
+                    operating_mode,
+                )?;
+            } else {
+                for &&unlocked_bonus in &allowed_unlocked_bonuses {
+                    slave_run_task_with(
+                        problem_desc,
+                        &problem,
+                        &mut best_solution,
+                        cli_args,
+                        Some(unlocked_bonus),
+                        operating_mode,
+                    )?;
+                }
+            };
+        }
     }
 
     if let Some((pose, score)) = best_solution {
