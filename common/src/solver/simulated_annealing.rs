@@ -11,6 +11,7 @@ pub struct Params {
     pub cooling_step_temp: f64,
     pub minimum_temp: f64,
     pub valid_edge_accept_prob: f64,
+    pub frozen_swap_prob: f64,
     pub iterations_per_cooling_step: usize,
     pub operating_mode: OperatingMode,
 }
@@ -104,91 +105,127 @@ impl SimulatedAnnealingSolver {
 
         let mut rng = rand::thread_rng();
         for _ in 0 .. self.params.iterations_per_cooling_step {
-            let mut counter = 0;
-            let vertex_index = loop {
-                counter += 1;
-                if counter > 10000000 {
-                    return Err(StepError::ProbablyInfiniteLoopInVertexIndex);
-                }
+            if !self.frozen_vertices_indices.is_empty() && rng.gen_range(0.0 .. 1.0) < self.params.frozen_swap_prob {
+                let frozen_index = rng.gen_range(0 .. self.frozen_vertices_indices.len());
+                let pose_vertices_index = loop {
+                    let index = rng.gen_range(0 .. self.vertices_tmp.len());
+                    if !self.frozen_vertices_indices.contains(&index) {
+                        break index;
+                    }
+                };
 
-                let edge_index = rng.gen_range(0 .. self.solver.problem.figure.edges.len());
-                let edge = &self.solver.problem.figure.edges[edge_index];
-                if self.solver.use_bonus.is_none() {
-                    let (is_valid, _ratio) = solver::is_edge_ratio_valid(
-                        edge,
-                        &self.vertices_tmp,
-                        &self.solver.problem,
-                    );
-                    if is_valid {
-                        let accept_prob = rng.gen_range(0.0 .. 1.0);
-                        if accept_prob >= self.params.valid_edge_accept_prob {
-                            continue;
+                let prev_index = self.frozen_vertices_indices[frozen_index];
+                let curr_index = pose_vertices_index;
+
+                self.vertices_tmp.swap(prev_index, curr_index);
+                let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.use_bonus);
+
+                let energy_cur = self.fitness_cur.energy();
+                let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+                let energy_tmp = fitness_tmp.energy();
+                let q_tmp = energy_tmp * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+
+                let accept_prob = if q_tmp < q_cur {
+                    1.0
+                } else {
+                    (-(q_tmp - q_cur) / self.temp).exp()
+                };
+                if rng.gen_range(0.0 .. 1.0) < accept_prob {
+                    // accept
+                    self.frozen_vertices_indices[frozen_index] = pose_vertices_index;
+                    self.vertices_cur.swap(prev_index, curr_index);
+                    self.fitness_cur = fitness_tmp;
+                } else {
+                    // reject
+                    self.vertices_tmp.swap(prev_index, curr_index);
+                }
+            } else {
+                let mut counter = 0;
+                let vertex_index = loop {
+                    counter += 1;
+                    if counter > 10000000 {
+                        return Err(StepError::ProbablyInfiniteLoopInVertexIndex);
+                    }
+
+                    let edge_index = rng.gen_range(0 .. self.solver.problem.figure.edges.len());
+                    let edge = &self.solver.problem.figure.edges[edge_index];
+                    if self.solver.use_bonus.is_none() {
+                        let (is_valid, _ratio) = solver::is_edge_ratio_valid(
+                            edge,
+                            &self.vertices_tmp,
+                            &self.solver.problem,
+                        );
+                        if is_valid {
+                            let accept_prob = rng.gen_range(0.0 .. 1.0);
+                            if accept_prob >= self.params.valid_edge_accept_prob {
+                                continue;
+                            }
                         }
                     }
-                }
-                let try_index = if rng.gen_range(0.0 .. 1.0) < 0.5 {
-                    edge.0
-                } else {
-                    edge.1
+                    let try_index = if rng.gen_range(0.0 .. 1.0) < 0.5 {
+                        edge.0
+                    } else {
+                        edge.1
+                    };
+                    if !self.frozen_vertices_indices.contains(&try_index) {
+                        break try_index;
+                    }
                 };
-                if !self.frozen_vertices_indices.contains(&try_index) {
-                    break try_index;
+                // let vertex_index = rng.gen_range(0 .. self.vertices_tmp.len());
+                let vertex = self.vertices_tmp[vertex_index];
+
+                let mut counter = 0;
+                let moved_vertex = loop {
+                    counter += 1;
+                    if counter > 10000000 {
+                        return Err(StepError::ProbablyInfiniteLoopInMovedVertex);
+                    }
+
+                    let x = vertex.0 + rng.gen_range(-1 ..= 1);
+                    let y = vertex.1 + rng.gen_range(-1 ..= 1);
+
+                    // let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
+                    // let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
+                    let try_vertex = problem::Point(x, y);
+                    if try_vertex != vertex && self.solver.is_hole(&try_vertex) {
+                        break try_vertex;
+                    }
+                };
+                self.vertices_tmp[vertex_index] = moved_vertex;
+                let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.use_bonus);
+
+                let energy_cur = self.fitness_cur.energy();
+                let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+                let energy_tmp = fitness_tmp.energy();
+                let q_tmp = energy_tmp * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+
+                let accept_prob = if q_tmp < q_cur {
+                    1.0
+                } else {
+                    (-(q_tmp - q_cur) / self.temp).exp()
+                };
+                if rng.gen_range(0.0 .. 1.0) < accept_prob {
+                    // accept
+
+                    // log::debug!(
+                    //     "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, q_cur = {:?}, q_tmp = {:?}, accept_prob = {:?}",
+                    //     self.vertices_cur[vertex_index],
+                    //     self.vertices_tmp[vertex_index],
+                    //     self.fitness_cur,
+                    //     fitness_tmp,
+                    //     q_cur,
+                    //     q_tmp,
+                    //     accept_prob,
+                    // );
+
+                    self.vertices_cur[vertex_index] =
+                        self.vertices_tmp[vertex_index];
+                    self.fitness_cur = fitness_tmp;
+                } else {
+                    // reject
+                    self.vertices_tmp[vertex_index] =
+                        self.vertices_cur[vertex_index];
                 }
-            };
-            // let vertex_index = rng.gen_range(0 .. self.vertices_tmp.len());
-            let vertex = self.vertices_tmp[vertex_index];
-
-            let mut counter = 0;
-            let moved_vertex = loop {
-                counter += 1;
-                if counter > 10000000 {
-                    return Err(StepError::ProbablyInfiniteLoopInMovedVertex);
-                }
-
-                let x = vertex.0 + rng.gen_range(-1 ..= 1);
-                let y = vertex.1 + rng.gen_range(-1 ..= 1);
-
-                // let x = rng.gen_range(self.solver.field_min.0 ..= self.solver.field_max.1);
-                // let y = rng.gen_range(self.solver.field_min.1 ..= self.solver.field_max.1);
-                let try_vertex = problem::Point(x, y);
-                if try_vertex != vertex && self.solver.is_hole(&try_vertex) {
-                    break try_vertex;
-                }
-            };
-            self.vertices_tmp[vertex_index] = moved_vertex;
-            let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.use_bonus);
-
-            let energy_cur = self.fitness_cur.energy();
-            let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
-            let energy_tmp = fitness_tmp.energy();
-            let q_tmp = energy_tmp * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
-
-            let accept_prob = if q_tmp < q_cur {
-                1.0
-            } else {
-                (-(q_tmp - q_cur) / self.temp).exp()
-            };
-            if rng.gen_range(0.0 .. 1.0) < accept_prob {
-                // accept
-
-                // log::debug!(
-                //     "accepted {:?} -> {:?} because fitness_cur = {:?}, fitness_tmp = {:?}, q_cur = {:?}, q_tmp = {:?}, accept_prob = {:?}",
-                //     self.vertices_cur[vertex_index],
-                //     self.vertices_tmp[vertex_index],
-                //     self.fitness_cur,
-                //     fitness_tmp,
-                //     q_cur,
-                //     q_tmp,
-                //     accept_prob,
-                // );
-
-                self.vertices_cur[vertex_index] =
-                    self.vertices_tmp[vertex_index];
-                self.fitness_cur = fitness_tmp;
-            } else {
-                // reject
-                self.vertices_tmp[vertex_index] =
-                    self.vertices_cur[vertex_index];
             }
         }
 

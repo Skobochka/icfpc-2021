@@ -519,6 +519,7 @@ impl Env {
                 cooling_step_temp: 1.0,
                 minimum_temp: 2.0,
                 valid_edge_accept_prob: 0.5,
+                frozen_swap_prob: 0.15,
                 iterations_per_cooling_step: 10000,
                 operating_mode,
             },
@@ -721,6 +722,7 @@ impl Env {
                                 cooling_step_temp: 1.0,
                                 minimum_temp: 2.0,
                                 valid_edge_accept_prob: 0.5,
+                                frozen_swap_prob: 0.15,
                                 iterations_per_cooling_step: 10000,
                                 operating_mode: solver::simulated_annealing::OperatingMode::BonusCollector {
                                     target_problem: problem_id,
