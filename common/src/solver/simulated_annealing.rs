@@ -3,6 +3,7 @@ use rand::Rng;
 use crate::{
     solver,
     problem,
+    geo_hole_bloom,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -381,7 +382,7 @@ fn generate_vertices(
 impl Fitness {
     fn calc(
         problem: &problem::Problem,
-        geo_hole: &geo::Polygon<f64>,
+        geo_hole: &geo_hole_bloom::GeoHoleBloom,
         vertices: &[problem::Point],
         use_bonus: &Option<problem::ProblemBonusType>,
     )

@@ -25,7 +25,7 @@ use serde_derive::{
     Deserialize,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug)]
 pub struct Point(pub i64, pub i64);
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -216,29 +216,27 @@ impl Problem {
         }
     }
 
-    pub fn score_vertices_check_hole(&self,
-                                     geo_hole: &geo::Polygon<f64>,
-                                     pose_vertices: &[Point],
-                                     bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
+    pub fn score_vertices_check_hole<E>(
+        &self,
+        geo_hole: &E,
+        pose_vertices: &[Point],
+        bonus: Option<PoseBonus>,
+    )
+        -> Result<(), PoseValidationError>
+    where E: InvalidEdge,
+    {
         let mut edges_out_of_hole_count = 0;
         let mut outer_vertex: Option<usize> = None;
         for &Edge(from_idx, to_idx) in &self.figure.edges {
-            let geo_start = geo::Coordinate::from(pose_vertices[from_idx]);
-            let geo_end = geo::Coordinate::from(pose_vertices[to_idx]);
-            let geo_edge = geo::Line {
-                start: geo_start,
-                end: geo_end,
-            };
-            if geo_hole.contains(&geo_edge) || geo_hole.exterior().contains(&geo_edge) {
-                // ok
-            }
-            else {
+            let v_start = pose_vertices[from_idx];
+            let v_end = pose_vertices[to_idx];
+            if geo_hole.is_edge_invalid(v_start, v_end) {
                 if let Some(PoseBonus::Wallhack { .. }) = bonus {
                     /* probably we can allow that for one vertice */
                     match outer_vertex {
                         None => {
-                            let contains_start = geo_hole.contains(&geo_start) || geo_hole.exterior().contains(&geo_start);
-                            let contains_end = geo_hole.contains(&geo_end) || geo_hole.exterior().contains(&geo_end);
+                            let contains_start = !geo_hole.is_edge_invalid(v_start, v_start);
+                            let contains_end = !geo_hole.is_edge_invalid(v_end, v_end);
                             if !contains_start && contains_end {
                                 outer_vertex = Some(from_idx);
                                 continue; // Ok, that's edge belongs to outer-point
@@ -267,10 +265,15 @@ impl Problem {
     }
 
 
-    pub fn score_vertices(&self,
-                          geo_hole: &geo::Polygon<f64>,
-                          pose_vertices: &[Point],
-                          bonus: Option<PoseBonus>) -> Result<i64, PoseValidationError> {
+    pub fn score_vertices<E>(
+        &self,
+        geo_hole: &E,
+        pose_vertices: &[Point],
+        bonus: Option<PoseBonus>,
+    )
+        -> Result<i64, PoseValidationError>
+    where E: InvalidEdge,
+    {
         self.score_vertices_check_count(pose_vertices, bonus)?;
         self.score_vertices_check_hole(geo_hole, pose_vertices, bonus)?;
         self.score_vertices_check_stretching(pose_vertices, bonus)?;
@@ -283,7 +286,7 @@ impl Problem {
     }
 
 
-    pub fn score_pose(&self, geo_hole: &geo::Polygon<f64>, pose: &Pose) -> Result<i64, PoseValidationError> {
+    pub fn score_pose<E>(&self, geo_hole: &E, pose: &Pose) -> Result<i64, PoseValidationError> where E: InvalidEdge {
         self.score_vertices(geo_hole, &pose.vertices, pose.bonuses.as_ref().and_then(|bonuses| bonuses.first().cloned()))
     }
 
@@ -570,6 +573,23 @@ impl SquareRing {
     }
 }
 
+pub trait InvalidEdge {
+    fn is_edge_invalid(&self, edge_from: Point, edge_to: Point) -> bool;
+}
+
+impl InvalidEdge for geo::Polygon<f64> {
+    fn is_edge_invalid(&self, edge_from: Point, edge_to: Point) -> bool {
+        let geo_start = geo::Coordinate::from(edge_from);
+        let geo_end = geo::Coordinate::from(edge_to);
+        let geo_edge = geo::Line { start: geo_start, end: geo_end, };
+
+        if self.contains(&geo_edge) || self.exterior().contains(&geo_edge) {
+            false
+        } else {
+            true
+        }
+    }
+}
 
 
 #[cfg(test)]
