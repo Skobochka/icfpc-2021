@@ -98,8 +98,8 @@ fn main() -> Result<(), Error> {
                         target_problem: problem::ProblemId(problem_id),
                     },
                 None =>
-                    // solver::simulated_annealing::OperatingMode::ZeroHunter,
-                    solver::simulated_annealing::OperatingMode::ScoreMaximizer,
+                    solver::simulated_annealing::OperatingMode::ZeroHunter,
+                    // solver::simulated_annealing::OperatingMode::ScoreMaximizer,
             },
         },
     ).map_err(Error::SimulatedAnnealingSolverCreate)?;
@@ -117,6 +117,18 @@ fn main() -> Result<(), Error> {
                     solver.fitness(),
                 );
                 solver.reheat(cli_args.reheat_factor);
+
+                let pose = problem::Pose {
+                    vertices: solver.vertices().to_vec(),
+                    bonuses: if let Some(bonus) = unlocked_bonus {
+                        Some(vec![bonus])
+                    } else {
+                        None
+                    },
+                };
+                pose.write_to_file("./temp.pose")
+                    .map_err(Error::PoseExport)?;
+
                 reheats_count += 1;
             },
             Err(solver::simulated_annealing::StepError::TempTooLow) => {

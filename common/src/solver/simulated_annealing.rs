@@ -40,7 +40,7 @@ pub struct SimulatedAnnealingSolver {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Fitness {
     FigureCorrupted { ratio_avg: f64, },
-    NotFitHole { bad_edges_count: usize, ratio_avg: f64, },
+    NotFitHole { bad_edges_count: usize, },
     FigureScored { score: i64, },
 }
 
@@ -66,7 +66,7 @@ impl SimulatedAnnealingSolver {
             .map_err(CreateError::GenerateVertices)?;
 
         let temp = params.max_temp;
-        let fitness_cur = Fitness::calc(&solver.problem, &vertices_cur, &solver.use_bonus);
+        let fitness_cur = Fitness::calc(&solver.problem, &solver.geo_hole, &vertices_cur, &solver.use_bonus);
 
         Ok(SimulatedAnnealingSolver {
             solver,
@@ -84,7 +84,7 @@ impl SimulatedAnnealingSolver {
         generate_vertices(&self.solver, &mut self.vertices_cur, &mut self.frozen_vertices_indices, self.params.operating_mode)?;
         self.temp = self.params.max_temp;
         self.steps = 0;
-        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.vertices_cur, &self.solver.use_bonus);
+        self.fitness_cur = Fitness::calc(&self.solver.problem, &self.solver.geo_hole, &self.vertices_cur, &self.solver.use_bonus);
         Ok(())
     }
 
@@ -133,7 +133,7 @@ impl SimulatedAnnealingSolver {
                 let curr_index = pose_vertices_index;
 
                 self.vertices_tmp.swap(prev_index, curr_index);
-                let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.use_bonus);
+                let fitness_tmp = Fitness::calc(&self.solver.problem, &self.solver.geo_hole, &self.vertices_tmp, &self.solver.use_bonus);
 
                 let energy_cur = self.fitness_cur.energy();
                 let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
@@ -227,7 +227,7 @@ impl SimulatedAnnealingSolver {
                     }
                 };
                 self.vertices_tmp[vertex_index] = moved_vertex;
-                let fitness_tmp = Fitness::calc(&self.solver.problem, &self.vertices_tmp, &self.solver.use_bonus);
+                let fitness_tmp = Fitness::calc(&self.solver.problem, &self.solver.geo_hole, &self.vertices_tmp, &self.solver.use_bonus);
 
                 let energy_cur = self.fitness_cur.energy();
                 let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
@@ -379,7 +379,14 @@ fn generate_vertices(
 }
 
 impl Fitness {
-    fn calc(problem: &problem::Problem, vertices: &[problem::Point], use_bonus: &Option<problem::ProblemBonusType>) -> Self {
+    fn calc(
+        problem: &problem::Problem,
+        geo_hole: &geo::Polygon<f64>,
+        vertices: &[problem::Point],
+        use_bonus: &Option<problem::ProblemBonusType>,
+    )
+        -> Self
+    {
         let maybe_pose_bonus = match use_bonus {
             None =>
                 None,
@@ -393,32 +400,17 @@ impl Fitness {
                 Some(problem::PoseBonus::Superflex { problem: problem::ProblemId(0), }),
         };
 
-        let mut is_ok = true;
-        let ratio_sum = match problem.score_vertices_check_stretching(vertices, maybe_pose_bonus) {
-            Ok(ratio_sum) =>
-                ratio_sum,
+        match problem.score_vertices(geo_hole, vertices, maybe_pose_bonus) {
+            Ok(score) =>
+                Fitness::FigureScored { score, },
+            Err(problem::PoseValidationError::VerticeCountMismatch) =>
+                panic!("unexpected PoseValidationError::VerticeCountMismatch on vertices_cur.len() = {}", vertices.len()),
             Err(problem::PoseValidationError::BrokenEdgesFound { ratio_sum, .. }) => {
-                is_ok = false;
-                ratio_sum
+                let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
+                Fitness::FigureCorrupted { ratio_avg, }
             },
-            Err(..) =>
-                unreachable!(),
-        };
-
-        let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
-        if is_ok {
-            match problem.score_vertices(vertices, maybe_pose_bonus) {
-                Ok(score) =>
-                    Fitness::FigureScored { score, },
-                Err(problem::PoseValidationError::VerticeCountMismatch) =>
-                    panic!("unexpected PoseValidationError::VerticeCountMismatch on vertices_cur.len() = {}", vertices.len()),
-                Err(problem::PoseValidationError::BrokenEdgesFound { broken_edges, .. }) =>
-                    panic!("unexpected PoseValidationError::Broken_Edges on broken_edges = {:?}", broken_edges),
-                Err(problem::PoseValidationError::EdgesNotFitHole(not_fit_edges)) =>
-                    Fitness::NotFitHole { bad_edges_count: not_fit_edges.len(), ratio_avg, },
-            }
-        } else {
-            Fitness::FigureCorrupted { ratio_avg, }
+            Err(problem::PoseValidationError::EdgesNotFitHole(not_fit_edges)) =>
+                Fitness::NotFitHole { bad_edges_count: not_fit_edges, },
         }
     }
 
@@ -434,8 +426,8 @@ impl Fitness {
                 } else {
                     4.0 - (1.0 / ratio_avg)
                 },
-            &Fitness::NotFitHole { bad_edges_count, ratio_avg, } =>
-                5.0 - (1.0 / bad_edges_count as f64) + ratio_avg,
+            &Fitness::NotFitHole { bad_edges_count, } =>
+                4.0 + bad_edges_count as f64, // / problem.figure.edges.len() as f64),
         }
     }
 }

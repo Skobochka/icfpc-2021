@@ -20,6 +20,7 @@ pub struct Solver {
     pose: problem::Pose,
     pose_score: i64,
     use_bonus: Option<problem::ProblemBonusType>,
+    geo_hole: geo::Polygon<f64>,
 }
 
 #[derive(Debug)]
@@ -98,7 +99,8 @@ impl Solver {
             },
             Some(pose) => pose,
         };
-        let pose_score = match problem.score_pose(&pose) {
+        let geo_hole = problem.hole_polygon_f64();
+        let pose_score = match problem.score_pose(&geo_hole, &pose) {
             Ok(score) => score,
             _ => i64::MAX,
         };
@@ -114,6 +116,7 @@ impl Solver {
             pose,
             pose_score,
             use_bonus,
+            geo_hole,
         })
     }
 

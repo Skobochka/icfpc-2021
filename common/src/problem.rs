@@ -111,8 +111,8 @@ pub enum WriteFileError {
 #[derive(Debug, PartialEq)]
 pub enum PoseValidationError {
     VerticeCountMismatch,
-    BrokenEdgesFound { ratio_sum: f64, broken_edges: Vec<Edge>, },
-    EdgesNotFitHole(Vec<Edge>),
+    BrokenEdgesFound { ratio_sum: f64, broken_edges_count: usize, },
+    EdgesNotFitHole(usize),
 }
 
 impl Problem {
@@ -132,7 +132,7 @@ impl Problem {
     }
 
     pub fn import_pose(&mut self, pose: Pose) -> Result<i64, PoseValidationError> {
-        let score = self.score_pose(&pose);
+        let score = self.score_pose(&self.hole_polygon_f64(), &pose);
         self.figure.vertices = pose.vertices;
         score
     }
@@ -176,7 +176,7 @@ impl Problem {
                 }
 
                 if ratio_sum > (self.figure.edges.len() as f64 * self.epsilon as f64) / 1000000_f64 {
-                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges: vec![], });
+                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges_count: 0, });
                 }
 
                 Ok(ratio_sum)
@@ -186,7 +186,7 @@ impl Problem {
             }
             _ => {
                 // Check stretching
-                let mut broken_edges = Vec::new();
+                let mut broken_edges_count = 0;
                 let mut allow_broken = match bonus {
                     Some(PoseBonus::Superflex { .. }) => 1,
                     _ => 0,
@@ -204,11 +204,11 @@ impl Problem {
                             continue;
                         }
                         // log::debug!("broken edge found. {:?}: d_before {}, d_after {}", edge, d_before, d_after);
-                        broken_edges.push(Edge(from_idx, to_idx));
+                        broken_edges_count += 1;
                     }
                 }
-                if !broken_edges.is_empty() {
-                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges, });
+                if broken_edges_count > 0 {
+                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges_count, });
                 }
 
                 Ok(ratio_sum)
@@ -217,10 +217,10 @@ impl Problem {
     }
 
     pub fn score_vertices_check_hole(&self,
+                                     geo_hole: &geo::Polygon<f64>,
                                      pose_vertices: &[Point],
                                      bonus: Option<PoseBonus>) -> Result<(), PoseValidationError> {
-        let geo_hole = self.hole_polygon_f64();
-        let mut edges_out_of_hole = Vec::new();
+        let mut edges_out_of_hole_count = 0;
         let mut outer_vertex: Option<usize> = None;
         for &Edge(from_idx, to_idx) in &self.figure.edges {
             let geo_start = geo::Coordinate::from(pose_vertices[from_idx]);
@@ -256,11 +256,11 @@ impl Problem {
                     };
                 }
 
-                edges_out_of_hole.push(Edge(from_idx, to_idx));
+                edges_out_of_hole_count += 1;
             }
         }
-        if !edges_out_of_hole.is_empty() {
-            return Err(PoseValidationError::EdgesNotFitHole(edges_out_of_hole));
+        if edges_out_of_hole_count > 0 {
+            return Err(PoseValidationError::EdgesNotFitHole(edges_out_of_hole_count));
         }
 
         Ok(())
@@ -268,12 +268,12 @@ impl Problem {
 
 
     pub fn score_vertices(&self,
+                          geo_hole: &geo::Polygon<f64>,
                           pose_vertices: &[Point],
                           bonus: Option<PoseBonus>) -> Result<i64, PoseValidationError> {
         self.score_vertices_check_count(pose_vertices, bonus)?;
+        self.score_vertices_check_hole(geo_hole, pose_vertices, bonus)?;
         self.score_vertices_check_stretching(pose_vertices, bonus)?;
-        self.score_vertices_check_hole(pose_vertices, bonus)?;
-
 
         let dislikes = self.hole.iter().map(|hole_vert| {
             pose_vertices.iter().map(|pose_vert| distance(hole_vert, pose_vert)).min().unwrap()
@@ -283,8 +283,8 @@ impl Problem {
     }
 
 
-    pub fn score_pose(&self, pose: &Pose) -> Result<i64, PoseValidationError> {
-        self.score_vertices(&pose.vertices, pose.bonuses.as_ref().and_then(|bonuses| bonuses.first().cloned()))
+    pub fn score_pose(&self, geo_hole: &geo::Polygon<f64>, pose: &Pose) -> Result<i64, PoseValidationError> {
+        self.score_vertices(geo_hole, &pose.vertices, pose.bonuses.as_ref().and_then(|bonuses| bonuses.first().cloned()))
     }
 
     pub fn possible_rotations(&self) -> Vec<f64> {
@@ -296,7 +296,7 @@ impl Problem {
             new_geo_figure.rotate_around_centroid_mut(angle as f64);
             let mut new_figure = self.figure.clone();
             new_figure.import_from_geo(new_geo_figure.points).unwrap();
-            match self.score_vertices(&new_figure.vertices, None) {
+            match self.score_vertices(&self.hole_polygon_f64(), &new_figure.vertices, None) {
                 Err(PoseValidationError::BrokenEdgesFound { .. }) |
                 Err(PoseValidationError::VerticeCountMismatch) => continue,
                 _ => { angles.push(angle as f64); }
@@ -315,7 +315,7 @@ impl Problem {
             new_geo_figure.rotate_around_point_mut(angle as f64, geo_point);
             let mut new_figure = self.figure.clone();
             new_figure.import_from_geo(new_geo_figure.points).unwrap();
-            match self.score_vertices(&new_figure.vertices, None) {
+            match self.score_vertices(&self.hole_polygon_f64(), &new_figure.vertices, None) {
                 Err(PoseValidationError::BrokenEdgesFound { .. }) |
                 Err(PoseValidationError::VerticeCountMismatch) => continue,
                 _ => { angles.push(angle as f64); }
@@ -335,7 +335,7 @@ impl Problem {
             new_geo_figure.rotate_around_centroid_mut(angle as f64);
             let mut new_figure = self.figure.clone();
             new_figure.import_from_geo(new_geo_figure.points).unwrap();
-            match self.score_vertices(&new_figure.vertices, None) {
+            match self.score_vertices(&self.hole_polygon_f64(), &new_figure.vertices, None) {
                 Err(PoseValidationError::BrokenEdgesFound { .. }) |
                 Err(PoseValidationError::VerticeCountMismatch) => continue,
                 _ => { angles.push(angle as f64); }
@@ -701,9 +701,18 @@ mod tests {
     #[test]
     fn score_vertices_check_hole() {
         let problem: Problem = serde_json::from_str(PROBLEM_13_JSON).unwrap();
-        assert!(problem.score_vertices_check_hole(&vec![Point(15,21), Point(34,0), Point(0,45), Point(19,24)], None).is_err());
-        assert!(problem.score_vertices_check_hole(&vec![Point(20,0), Point(0,20), Point(20,40), Point(19,24)], None).is_ok());
-        // TODO: add more tests
+        assert!(
+            problem.score_vertices_check_hole(
+                &problem.hole_polygon_f64(),
+                &vec![Point(15,21), Point(34,0), Point(0,45), Point(19,24)], None
+            ).is_err(),
+        );
+        assert!(
+            problem.score_vertices_check_hole(
+                &problem.hole_polygon_f64(),
+                &vec![Point(20,0), Point(0,20), Point(20,40), Point(19,24)], None
+            ).is_ok(),
+        );
     }
 
     #[test]
@@ -711,9 +720,20 @@ mod tests {
         let problem: Problem = serde_json::from_str(PROBLEM_13_JSON).unwrap();
         let pose: Pose = serde_json::from_str(POSE_13_SCORE_0_JSON).unwrap();
 
-        assert!(problem.score_vertices(&problem.export_pose().vertices, None).is_err());
-        assert_eq!(problem.score_vertices(&pose.vertices, None), Ok(0));
-        // TODO: add more tests
+        assert!(
+            problem.score_vertices(
+                &problem.hole_polygon_f64(),
+                &problem.export_pose().vertices,
+                None
+            ).is_err());
+        assert_eq!(
+            problem.score_vertices(
+                &problem.hole_polygon_f64(),
+                &pose.vertices,
+                None,
+            ),
+            Ok(0),
+        );
     }
 
     #[test]
@@ -727,11 +747,11 @@ mod tests {
 
         assert!(matches!(
             problem.score_vertices_check_stretching(&pose.vertices, None),
-            Err(PoseValidationError::BrokenEdgesFound { broken_edges, .. }) if broken_edges == vec![Edge(1, 2)],
+            Err(PoseValidationError::BrokenEdgesFound { broken_edges_count: 1, .. }),
         ));
         assert!(matches!(
-            problem.score_vertices(&pose.vertices, None),
-            Err(PoseValidationError::BrokenEdgesFound { broken_edges, .. }) if broken_edges == vec![Edge(1, 2)],
+            problem.score_vertices(&problem.hole_polygon_f64(), &pose.vertices, None),
+            Err(PoseValidationError::BrokenEdgesFound { broken_edges_count: 1, .. }),
         ));
     }
 
@@ -743,20 +763,26 @@ mod tests {
         let pose_vertices = vec![
             Point(32, 47), Point(34, 47), Point(33, 48),
         ];
-        assert_eq!(problem.score_vertices_check_hole(&pose_vertices, None), Ok(()));
-        assert_eq!(problem.score_vertices_check_hole(&pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })), Ok(()));
+        assert_eq!(problem.score_vertices_check_hole(&problem.hole_polygon_f64(), &pose_vertices, None), Ok(()));
+        assert_eq!(problem.score_vertices_check_hole(
+            &problem.hole_polygon_f64(), &pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })), Ok(())
+        );
 
         let pose_vertices = vec![
             Point(32, 47), Point(0, 48), Point(33, 48),
         ];
-        assert!(problem.score_vertices_check_hole(&pose_vertices, None).is_err());
-        assert_eq!(problem.score_vertices_check_hole(&pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })), Ok(()));
+        assert!(problem.score_vertices_check_hole(&problem.hole_polygon_f64(), &pose_vertices, None).is_err());
+        assert_eq!(problem.score_vertices_check_hole(
+            &problem.hole_polygon_f64(), &pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })), Ok(())
+        );
 
         let pose_vertices = vec![
             Point(0, 48), Point(34, 47), Point(1000, 48),
         ];
-        assert!(problem.score_vertices_check_hole(&pose_vertices, None).is_err());
-        assert!(problem.score_vertices_check_hole(&pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })).is_err());
+        assert!(problem.score_vertices_check_hole(&problem.hole_polygon_f64(), &pose_vertices, None).is_err());
+        assert!(problem.score_vertices_check_hole(
+            &problem.hole_polygon_f64(), &pose_vertices, Some(PoseBonus::Wallhack { problem: ProblemId(0), })
+        ).is_err());
     }
 
     #[test]
@@ -785,7 +811,7 @@ mod tests {
             r#"{"bonuses":[{"bonus":"WALLHACK","problem":55}],"vertices":[[22,27],[33,24],[53,15],[12,15],[59,26],[59,12],[21,18],[54,9],[56,28],[19,17],[21,41]]}"#,
         ).unwrap();
 
-        assert!(problem_47.score_pose(&pose_47).is_err());
+        assert!(problem_47.score_pose(&problem_47.hole_polygon_f64(), &pose_47).is_err());
 
         let problem_92: Problem = serde_json::from_str(
             r#"{"bonuses":[{"bonus":"BREAK_A_LEG","problem":99,"position":[96,12]},{"bonus":"SUPERFLEX","problem":30,"position":[30,24]},{"bonus":"GLOBALIST","problem":7,"position":[84,72]}],"hole":[[5,29],[4,18],[0,10],[8,5],[16,13],[21,0],[33,4],[33,44],[47,16],[59,4],[68,3],[78,3],[115,8],[72,18],[83,29],[92,41],[109,42],[101,52],[97,65],[115,59],[115,69],[108,83],[110,100],[102,115],[100,93],[99,81],[85,90],[92,102],[74,98],[70,115],[61,91],[61,80],[77,85],[65,68],[73,58],[91,50],[71,44],[59,55],[55,63],[51,72],[47,83],[41,95],[25,100],[44,108],[26,111],[15,113],[5,115],[2,106],[14,103],[12,92],[24,87],[36,73],[56,34],[24,66],[22,54],[0,82],[4,59],[2,49],[1,40],[19,37]],"epsilon":160000,"figure":{"edges":[[2,5],[5,4],[4,1],[1,0],[0,8],[8,3],[3,7],[7,11],[11,13],[13,12],[12,18],[18,19],[19,14],[14,15],[15,17],[17,16],[16,10],[10,6],[6,2],[8,12],[7,9],[9,3],[8,9],[9,12],[13,9],[9,11],[4,8],[12,14],[5,10],[10,15]],"vertices":[[30,40],[30,50],[40,105],[50,25],[50,45],[50,75],[50,105],[55,15],[55,35],[60,25],[60,80],[65,15],[65,35],[70,25],[70,45],[70,75],[70,105],[80,105],[90,40],[90,50]]}}"#,
@@ -794,7 +820,7 @@ mod tests {
             r#"{"bonuses":[{"bonus":"WALLHACK","problem":119}],"vertices":[[81,43],[74,35],[15,31],[50,26],[52,33],[35,55],[17,22],[61,27],[61,28],[53,35],[25,49],[52,24],[51,24],[43,32],[50,13],[31,39],[8,70],[10,60],[77,23],[67,22]]}"#,
         ).unwrap();
 
-        assert!(problem_92.score_pose(&pose_92).is_err());
+        assert!(problem_92.score_pose(&problem_92.hole_polygon_f64(), &pose_92).is_err());
     }
 
     #[test]
@@ -806,7 +832,7 @@ mod tests {
             r#"{"vertices":[[15,21],[34,0],[0,45],[19,24]],"bonuses":[{"bonus":"WALLHACK","problem":999}]}"#,
         ).unwrap();
 
-        assert!(problem_2_outer.score_pose(&pose_2_outer).is_err());
+        assert!(problem_2_outer.score_pose(&problem_2_outer.hole_polygon_f64(), &pose_2_outer).is_err());
 
         let problem_1_outer: Problem = serde_json::from_str(
             r#"{"bonuses":[{"bonus":"GLOBALIST","problem":46,"position":[20,20]},{"bonus":"BREAK_A_LEG","problem":88,"position":[30,30]},{"bonus":"GLOBALIST","problem":20,"position":[30,12]}],"hole":[[20,0],[40,20],[20,40],[0,20]],"epsilon":2494,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[15,21],[34,0],[15,15],[19,24]]}}"#,
@@ -815,12 +841,12 @@ mod tests {
         let pose_1_outer_no_bonus: Pose = serde_json::from_str(
             r#"{"vertices":[[15,21],[34,0],[15,15],[19,24]],"bonuses":null}"#,
         ).unwrap();
-        assert!(problem_1_outer.score_pose(&pose_1_outer_no_bonus).is_err());
+        assert!(problem_1_outer.score_pose(&problem_1_outer.hole_polygon_f64(), &pose_1_outer_no_bonus).is_err());
 
         let pose_1_outer_wallhack: Pose = serde_json::from_str(
             r#"{"vertices":[[15,21],[34,0],[15,15],[19,24]],"bonuses":[{"bonus":"WALLHACK","problem":999}]}"#,
         ).unwrap();
-        assert!(problem_1_outer.score_pose(&pose_1_outer_wallhack).is_ok());
+        assert!(problem_1_outer.score_pose(&problem_1_outer.hole_polygon_f64(), &pose_1_outer_wallhack).is_ok());
 
         let problem_2_outer_same: Problem = serde_json::from_str(
             r#"{"bonuses":[{"bonus":"GLOBALIST","problem":46,"position":[20,20]},{"bonus":"BREAK_A_LEG","problem":88,"position":[30,30]},{"bonus":"GLOBALIST","problem":20,"position":[30,12]}],"hole":[[20,0],[40,20],[20,40],[0,20]],"epsilon":2494,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[15,21],[34,0],[34,0],[19,24]]}}"#,
@@ -828,10 +854,10 @@ mod tests {
         let pose_2_outer_same_nobonus: Pose = serde_json::from_str(
             r#"{"vertices":[[15,21],[34,0],[34,0],[19,24]],"bonuses":null}"#,
         ).unwrap();
-        assert!(problem_2_outer_same.score_pose(&pose_2_outer_same_nobonus).is_err());
+        assert!(problem_2_outer_same.score_pose(&problem_2_outer_same.hole_polygon_f64(), &pose_2_outer_same_nobonus).is_err());
         let pose_2_outer_same_wallhack: Pose = serde_json::from_str(
             r#"{"vertices":[[15,21],[34,0],[34,0],[19,24]],"bonuses":[{"bonus":"WALLHACK","problem":999}]}"#,
         ).unwrap();
-        assert!(problem_2_outer_same.score_pose(&pose_2_outer_same_wallhack ).is_err());
+        assert!(problem_2_outer_same.score_pose(&problem_2_outer_same.hole_polygon_f64(), &pose_2_outer_same_wallhack ).is_err());
     }
 }

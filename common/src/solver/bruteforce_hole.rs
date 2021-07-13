@@ -194,7 +194,7 @@ impl BruteforceHoleSolver {
 
             vertices[vert_idx] = *hole_vertice;
             let (new_score, new_pose) = if vert_idx == vertices.len() - 1 {
-                match self.solver.problem.score_vertices(vertices, bonus) {
+                match self.solver.problem.score_vertices(&self.solver.geo_hole, vertices, bonus) {
                     Ok(score) => (score, Some(problem::Pose {
                         vertices: vertices.clone(),
                         bonuses: bonus.map(|b| vec![b]),
@@ -264,7 +264,7 @@ impl BruteforceHoleSolver {
         for point in self.point_set_for_vertice(vert_idx, vertices, distances, bonus) {
             vertices[vert_idx] = point;
             let (new_score, new_pose) = if vert_idx == vertices.len() - 1 {
-                match self.solver.problem.score_vertices(vertices, bonus) {
+                match self.solver.problem.score_vertices(&self.solver.geo_hole, vertices, bonus) {
                     Ok(score) => (score, Some(problem::Pose {
                         vertices: vertices.clone(),
                         bonuses: bonus.map(|b| vec![b]),
@@ -504,7 +504,7 @@ impl BruteforceHoleSolver {
                 if vert_idx == vertices.len() - 1 {
                     // log::debug!("scoring candidate... {:?}", vertices);
 
-                    match self.solver.problem.score_vertices(vertices, bonus) {
+                    match self.solver.problem.score_vertices(&self.solver.geo_hole, vertices, bonus) {
                         Ok(score) => {
                             // log::debug!("Found solution with score {:?}: {:?}", score, vertices);
                             if score == 0 { // perfect solution found

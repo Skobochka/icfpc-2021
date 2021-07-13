@@ -109,8 +109,8 @@ enum ScoringState {
     Unscored,
     Ok(i64),
     VerticeCountMismatch,
-    BrokenEdgesFound(Vec<problem::Edge>),
-    EdgesNotFitHole(Vec<problem::Edge>),
+    BrokenEdgesFound(usize),
+    EdgesNotFitHole(usize),
 }
 
 
@@ -243,8 +243,8 @@ impl Env {
                         ScoringState::Unscored => "<unscored>".to_string(),
                         ScoringState::Ok(score) => format!("score: {}", score),
                         ScoringState::VerticeCountMismatch => "score err: vertice count mismatch".to_string(),
-                        ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges.len()),
-                        ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges.len()),
+                        ScoringState::BrokenEdgesFound(edges) => format!("score err: {} broken edges found", edges),
+                        ScoringState::EdgesNotFitHole(edges) => format!("score err: {} edges does fit hole", edges),
                     },
                     match self.selected_angle {
                         None => "<n/a>".to_string(),
@@ -875,7 +875,7 @@ impl Env {
     }
 
     pub fn rescore_solution(&mut self) {
-        let score = self.initial_problem.score_vertices(&self.problem.figure.vertices, None);
+        let score = self.initial_problem.score_vertices(&self.initial_problem.hole_polygon_f64(), &self.problem.figure.vertices, None);
         self.update_score_state(score);
     }
 
@@ -950,9 +950,9 @@ impl Env {
                 log::debug!(" ;; pose load failure, vertice mismatch");
                 self.score_state = ScoringState::VerticeCountMismatch;
             },
-            Err(problem::PoseValidationError::BrokenEdgesFound { broken_edges, .. }) => {
-                log::debug!(" ;; pose load failure, broken edges found: {:?}", broken_edges);
-                self.score_state = ScoringState::BrokenEdgesFound(broken_edges);
+            Err(problem::PoseValidationError::BrokenEdgesFound { broken_edges_count, .. }) => {
+                log::debug!(" ;; pose load failure, {} broken edges found", broken_edges_count);
+                self.score_state = ScoringState::BrokenEdgesFound(broken_edges_count);
             },
             Err(problem::PoseValidationError::EdgesNotFitHole(edges)) => {
                 log::debug!(" ;; pose load failure, edges not fitting hole found");
@@ -970,7 +970,7 @@ impl Env {
                     vertices: solver.vertices().to_vec(),
                     bonuses: None,
                 };
-                assert!(self.problem.score_vertices(&pose.vertices, None).is_ok());
+                assert!(self.problem.score_vertices(&self.problem.hole_polygon_f64(), &pose.vertices, None).is_ok());
                 pose
             },
         }
