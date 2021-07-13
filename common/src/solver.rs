@@ -102,7 +102,7 @@ impl Solver {
             Some(pose) => pose,
         };
 
-        let geo_hole = geo_hole_bloom::GeoHoleBloom::new(&problem)
+        let geo_hole = geo_hole_bloom::GeoHoleBloom::new(&problem, 0.15)
             .map_err(CreateError::GeoHoleBloomCreate)?;
         let pose_score = match problem.score_pose(&geo_hole, &pose) {
             Ok(score) => score,

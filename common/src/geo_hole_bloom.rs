@@ -7,6 +7,12 @@ use std::{
         Arc,
         RwLock,
     },
+    sync::{
+        atomic::{
+            Ordering,
+            AtomicUsize,
+        },
+    },
 };
 
 use rand::Rng;
@@ -32,7 +38,7 @@ pub enum CreateError {
 }
 
 impl GeoHoleBloom {
-    pub fn new(problem: &problem::Problem) -> Result<GeoHoleBloom, CreateError> {
+    pub fn new(problem: &problem::Problem, false_positive_prob: f64) -> Result<GeoHoleBloom, CreateError> {
         if problem.hole.is_empty() {
             return Err(CreateError::NoPointsInHole);
         }
@@ -61,11 +67,17 @@ impl GeoHoleBloom {
         let field_height = field_max.1 - field_min.1 + 1;
         let field_area = field_width * field_height;
         let sq_field_area = field_area * field_area;
-        let bits_count = (sq_field_area / 10) as usize;
 
+        let bits_count = (-(sq_field_area as f64 * false_positive_prob.ln()) / ((2.0_f64).ln() * (2.0_f64).ln())).ceil() as usize;
         let hash_fns_count = ((bits_count as f64) / (sq_field_area as f64) * (2.0_f64).ln()).ceil() as usize;
 
-        // panic!("sq_field_area = {}, bits_count = {}, hash_fns_count = {}", sq_field_area, bits_count, hash_fns_count);
+        // panic!(
+        //     "false_positive_prob = {}, sq_field_area = {}, bits_count = {}, hash_fns_count = {}",
+        //     false_positive_prob,
+        //     sq_field_area,
+        //     bits_count,
+        //     hash_fns_count,
+        // );
 
         let mut rng = rand::thread_rng();
         let hash_fns_seeds: Vec<u64> = (0 .. hash_fns_count).map(|_| rng.gen()).collect();
@@ -83,6 +95,8 @@ impl GeoHoleBloom {
             bits_count,
             hash_fns_count,
         );
+
+        let processed = AtomicUsize::new(0);
 
         use rayon::prelude::*;
         (0 .. sq_field_area)
@@ -104,6 +118,9 @@ impl GeoHoleBloom {
 
                 let is_invalid = geo_hole.is_edge_invalid(point_a, point_b);
                 let shared_bits = shared_bits.clone();
+
+                processed.fetch_add(1, Ordering::Relaxed);
+
                 hash_fns_seeds
                     .iter()
                     .cloned()
@@ -130,6 +147,13 @@ impl GeoHoleBloom {
                 shared_bits.clone(),
                 |shared_bits, bit_index| {
                     let mut bits = shared_bits.write().unwrap();
+
+                    let one_10000 = sq_field_area as usize / 1000;
+                    let current = processed.load(Ordering::Relaxed);
+                    if current % one_10000 == 0 {
+                        log::debug!("{} out of {} items processed", current, sq_field_area);
+                    }
+
                     bits.set(bit_index, true);
                 },
             );
@@ -213,7 +237,7 @@ use rand::Rng;
         let problem_data = r#"{"bonuses":[{"bonus":"BREAK_A_LEG","problem":67,"position":[42,2]},{"bonus":"WALLHACK","problem":69,"position":[15,3]},{"bonus":"SUPERFLEX","problem":30,"position":[48,3]}],"hole":[[28,0],[56,4],[0,4]],"epsilon":0,"figure":{"edges":[[0,1],[0,2],[1,3],[2,3]],"vertices":[[0,20],[20,0],[20,40],[40,20]]}}"#;
         let problem: problem::Problem = serde_json::from_str(problem_data).unwrap();
 
-        let geo_hole_bloom = GeoHoleBloom::new(&problem).unwrap();
+        let geo_hole_bloom = GeoHoleBloom::new(&problem, 0.15).unwrap();
 
         let geo_hole = problem.hole_polygon_f64();
 
