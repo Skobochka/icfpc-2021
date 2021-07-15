@@ -88,6 +88,10 @@ impl SimulatedAnnealingSolver {
         Ok(())
     }
 
+    pub fn base(&self) -> &solver::Solver {
+        &self.solver
+    }
+
     pub fn reheat(&mut self, temp_factor: f64) {
         self.temp = self.params.max_temp * temp_factor;
     }

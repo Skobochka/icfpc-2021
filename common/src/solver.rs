@@ -3,6 +3,7 @@ use geo::algorithm::contains::Contains;
 use crate::{
     problem,
     geo_hole_bloom,
+    geo_hole_quad_tree,
 };
 
 pub mod simulated_annealing;
@@ -21,7 +22,7 @@ pub struct Solver {
     pose: problem::Pose,
     pose_score: i64,
     use_bonus: Option<problem::ProblemBonusType>,
-    geo_hole: geo::Polygon<f64>,
+    geo_hole: geo_hole_quad_tree::GeoHoleQuadTree,
 }
 
 #[derive(Debug)]
@@ -29,6 +30,7 @@ pub enum CreateError {
     NoPointsInHole,
     NoPointsInFigure,
     GeoHoleBloomCreate(geo_hole_bloom::CreateError),
+    GeoHoleQuadTreeCreate(geo_hole_quad_tree::CreateError),
 }
 
 impl Solver {
@@ -102,7 +104,9 @@ impl Solver {
             Some(pose) => pose,
         };
 
-        let geo_hole = problem.hole_polygon_f64();
+        // let geo_hole = problem.hole_polygon_f64();
+        let geo_hole = geo_hole_quad_tree::GeoHoleQuadTree::new(&problem)
+            .map_err(CreateError::GeoHoleQuadTreeCreate)?;
         let pose_score = match problem.score_pose(&geo_hole, &pose) {
             Ok(score) => score,
             _ => i64::MAX,
@@ -130,6 +134,10 @@ impl Solver {
         let mask_index = (point.1 - self.field_min.1) * self.field_width + (point.0 - self.field_min.0);
         self.hole_mask.get(mask_index as usize)
             .unwrap_or(false)
+    }
+
+    pub fn geo_hole(&self) -> &geo_hole_quad_tree::GeoHoleQuadTree {
+        &self.geo_hole
     }
 }
 

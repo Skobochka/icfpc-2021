@@ -17,6 +17,7 @@ use piston_window::{
 use common::{
     problem,
     solver,
+    geo_hole_quad_tree,
 };
 
 use crate::{
@@ -291,6 +292,56 @@ impl Env {
                 }
             },
             SolverMode::SimulatedAnnealing { solver, } => {
+                let quad_tree_nodes = solver.base().geo_hole().iter();
+
+                // log::debug!("Dumping quad tree");
+
+                for node in quad_tree_nodes {
+                    let color = match node.kind {
+                        geo_hole_quad_tree::NodeKind::Inside =>
+                            [0., 1., 0., 0.5,],
+                        geo_hole_quad_tree::NodeKind::Outside =>
+                            [1., 0., 0., 0.5,],
+                        geo_hole_quad_tree::NodeKind::Branch { .. } =>
+                            unreachable!(),
+                    };
+
+                    // log::debug!("{:?}", node);
+
+                    draw_element(draw::DrawElement::Line {
+                        color,
+                        radius: 0.5,
+                        source_x: node.min.0 as f64,
+                        source_y: node.min.1 as f64,
+                        target_x: (node.max.0 + 1) as f64,
+                        target_y: node.min.1 as f64,
+                    });
+                    draw_element(draw::DrawElement::Line {
+                        color,
+                        radius: 0.5,
+                        source_x: (node.max.0 + 1) as f64,
+                        source_y: node.min.1 as f64,
+                        target_x: (node.max.0 + 1) as f64,
+                        target_y: (node.max.1 + 1) as f64,
+                    });
+                    draw_element(draw::DrawElement::Line {
+                        color,
+                        radius: 0.5,
+                        source_x: (node.max.0 + 1) as f64,
+                        source_y: (node.max.1 + 1) as f64,
+                        target_x: node.min.0 as f64,
+                        target_y: (node.max.1 + 1) as f64,
+                    });
+                    draw_element(draw::DrawElement::Line {
+                        color,
+                        radius: 0.5,
+                        source_x: node.min.0 as f64,
+                        source_y: (node.max.1 + 1) as f64,
+                        target_x: node.min.0 as f64,
+                        target_y: node.min.1 as f64,
+                    });
+                }
+
                 let solver_vertices = solver.vertices();
                 for &edge in &self.problem.figure.edges {
                     let source_point = solver_vertices.get(edge.0)
@@ -600,7 +651,10 @@ impl Env {
 
                         for try_x in self.min_x as i64 ..= self.max_x as i64 {
                             for try_y in self.min_y as i64 .. self.max_y as i64 {
-                                if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
+                                if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x {
+                                    continue;
+                                }
+                                if (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
                                     continue;
                                 }
                                 let try_vertex = problem::Point(try_x, try_y);
@@ -652,12 +706,18 @@ impl Env {
 
                         for try_x in self.min_x as i64 ..= self.max_x as i64 {
                             for try_y in self.min_y as i64 .. self.max_y as i64 {
-                                if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x || (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
+                                if (try_x as f64) < self.min_x || (try_x as f64) > self.max_x {
+                                    continue;
+                                }
+                                if (try_y as f64) < self.min_y || (try_y as f64) > self.max_y {
                                     continue;
                                 }
                                 let oth_x = try_x + (vq.0 - vp.0);
                                 let oth_y = try_y + (vq.1 - vp.1);
-                                if (oth_x as f64) < self.min_x || (oth_x as f64) > self.max_x || (oth_y as f64) < self.min_y || (oth_y as f64) > self.max_y {
+                                if (oth_x as f64) < self.min_x || (oth_x as f64) > self.max_x {
+                                    continue;
+                                }
+                                if (oth_y as f64) < self.min_y || (oth_y as f64) > self.max_y {
                                     continue;
                                 }
                                 let try_vertex = problem::Point(try_x, try_y);
