@@ -1,3 +1,5 @@
+use std::time;
+
 use structopt::{
     StructOpt,
 };
@@ -104,6 +106,7 @@ fn main() -> Result<(), Error> {
         },
     ).map_err(Error::SimulatedAnnealingSolverCreate)?;
 
+    let mut dump_delay_start = time::Instant::now();
     let mut reheats_count = 0;
     let mut best_solution = None;
     loop {
@@ -187,12 +190,15 @@ fn main() -> Result<(), Error> {
                 (),
         }
 
-        log::debug!(
-            "temp: {}, fitness: {:?}, HITS_TOTAL = {}, HITS_SLOW = {}",
-            solver.temp(),
-            solver.fitness(),
-            common::geo_hole_quad_tree::HITS_TOTAL.load(std::sync::atomic::Ordering::Relaxed),
-            common::geo_hole_quad_tree::HITS_SLOW.load(std::sync::atomic::Ordering::Relaxed),
-        );
+        if dump_delay_start.elapsed().as_secs() > 120 {
+            log::debug!(
+                "temp: {}, fitness: {:?}, HITS_TOTAL = {}, HITS_SLOW = {}",
+                solver.temp(),
+                solver.fitness(),
+                common::geo_hole_quad_tree::HITS_TOTAL.load(std::sync::atomic::Ordering::Relaxed),
+                common::geo_hole_quad_tree::HITS_SLOW.load(std::sync::atomic::Ordering::Relaxed),
+            );
+            dump_delay_start = time::Instant::now();
+        }
     }
 }
