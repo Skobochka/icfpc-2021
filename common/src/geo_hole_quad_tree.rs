@@ -41,6 +41,8 @@ pub enum CreateError {
 
 impl GeoHoleQuadTree {
     pub fn new(problem: &problem::Problem) -> Result<GeoHoleQuadTree, CreateError> {
+        log::debug!("initializing GeoHoleQuadTree");
+
         if problem.hole.is_empty() {
             return Err(CreateError::NoPointsInHole);
         }
@@ -79,6 +81,8 @@ impl GeoHoleQuadTree {
             problem::Point(field_min.0 - 2, field_min.1 - 2),
             problem::Point(field_max.0 + 3, field_max.1 + 3),
         ).ok_or(CreateError::FieldIsTooSmall)?;
+
+        log::debug!("GeoHoleQuadTree initialized with {} nodes", NodesIterator { queue: vec![&root], }.count());
 
         Ok(GeoHoleQuadTree {
             root,
@@ -203,17 +207,22 @@ fn quad_tree_edge_node_intersection(node: &Node, edge: &geo::Line<f64>) -> Inter
         NodeKind::Outside =>
             IntersectsNode::Outside,
         NodeKind::Branch { children, } => {
+            let mut does_not_hit = false;
             for child in children {
                 match quad_tree_edge_node_intersection(child, edge) {
                     IntersectsNode::DoesNot =>
-                        return IntersectsNode::DoesNot,
+                        does_not_hit = true,
                     IntersectsNode::Inside =>
                         (),
                     IntersectsNode::Outside =>
                         return IntersectsNode::Outside,
                 }
             }
-            IntersectsNode::Inside
+            if does_not_hit {
+                IntersectsNode::DoesNot
+            } else {
+                IntersectsNode::Inside
+            }
         }
     }
 }
