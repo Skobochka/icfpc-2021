@@ -186,5 +186,13 @@ fn main() -> Result<(), Error> {
             solver::simulated_annealing::Fitness::NotFitHole { .. } =>
                 (),
         }
+
+        log::debug!(
+            "temp: {}, fitness: {:?}, HITS_TOTAL = {}, HITS_SLOW = {}",
+            solver.temp(),
+            solver.fitness(),
+            common::geo_hole_quad_tree::HITS_TOTAL.load(std::sync::atomic::Ordering::Relaxed),
+            common::geo_hole_quad_tree::HITS_SLOW.load(std::sync::atomic::Ordering::Relaxed),
+        );
     }
 }

@@ -1,3 +1,9 @@
+use std::{
+    sync::atomic::{
+        self, AtomicUsize,
+    },
+};
+
 use geo::{
     relate::{
         Relate,
@@ -12,6 +18,9 @@ use geo::{
 use crate::{
     problem,
 };
+
+pub static HITS_TOTAL: AtomicUsize = AtomicUsize::new(0);
+pub static HITS_SLOW: AtomicUsize = AtomicUsize::new(0);
 
 pub struct GeoHoleQuadTree {
     root: Node,
@@ -29,6 +38,7 @@ pub struct Node {
 pub enum NodeKind {
     Inside,
     Outside,
+    Uncertain,
     Branch { children: Vec<Node>, },
 }
 
@@ -107,10 +117,15 @@ impl problem::InvalidEdge for GeoHoleQuadTree {
                 true,
             IntersectsNode::Inside =>
                 false,
+            IntersectsNode::Uncertain => {
+                // slow path: actually check polygon
+                HITS_SLOW.fetch_add(1, atomic::Ordering::Relaxed);
+                self.geo_hole.is_edge_invalid(edge_from, edge_to)
+            },
             IntersectsNode::DoesNot =>
-            // slow path: actually check polygon
-                self.geo_hole.is_edge_invalid(edge_from, edge_to),
+                true,
         };
+        HITS_TOTAL.fetch_add(1, atomic::Ordering::Relaxed);
         // log::debug!("is_edge_invalid({:?}) -> {:?}", geo_edge, is_invalid);
 
         assert_eq!(is_invalid, self.geo_hole.is_edge_invalid(edge_from, edge_to));
@@ -131,7 +146,7 @@ impl<'a> Iterator for NodesIterator<'a> {
             let node = self.queue.pop()?;
 
             match &node.kind {
-                NodeKind::Inside | NodeKind::Outside =>
+                NodeKind::Inside | NodeKind::Outside | NodeKind::Uncertain =>
                     return Some(node),
                 NodeKind::Branch { children, } =>
                     self.queue.extend(children.iter()),
@@ -169,8 +184,7 @@ fn quad_tree_build(hole: &geo::Polygon<f64>, min: problem::Point, max: problem::
         Some(Node { min, max, kind: NodeKind::Inside, })
     } else if min.0 + 1 >= max.0 && min.1 + 1 >= max.1 {
         assert!(intersection_matrix.is_intersects());
-        // Some(Node { min, max, kind: NodeKind::Inside, })
-        None
+        Some(Node { min, max, kind: NodeKind::Uncertain, })
     } else {
         let center = problem::Point(min.0 + ((max.0 - min.0) / 2), min.1 + ((max.1 - min.1) / 2));
         // log::debug!(" > NodeKind::Branch @ {:?} | matrix = {:?}", center, intersection_matrix);
@@ -191,6 +205,7 @@ enum IntersectsNode {
     DoesNot,
     Inside,
     Outside,
+    Uncertain,
 }
 
 fn quad_tree_edge_node_intersection(node: &Node, edge: &geo::Line<f64>) -> IntersectsNode {
@@ -206,20 +221,24 @@ fn quad_tree_edge_node_intersection(node: &Node, edge: &geo::Line<f64>) -> Inter
             IntersectsNode::Inside,
         NodeKind::Outside =>
             IntersectsNode::Outside,
+        NodeKind::Uncertain =>
+            IntersectsNode::Uncertain,
         NodeKind::Branch { children, } => {
-            let mut does_not_hit = false;
+            let mut uncertain_hit = false;
             for child in children {
                 match quad_tree_edge_node_intersection(child, edge) {
                     IntersectsNode::DoesNot =>
-                        does_not_hit = true,
+                        (),
+                    IntersectsNode::Uncertain =>
+                        uncertain_hit = true,
                     IntersectsNode::Inside =>
                         (),
                     IntersectsNode::Outside =>
                         return IntersectsNode::Outside,
                 }
             }
-            if does_not_hit {
-                IntersectsNode::DoesNot
+            if uncertain_hit {
+                IntersectsNode::Uncertain
             } else {
                 IntersectsNode::Inside
             }
