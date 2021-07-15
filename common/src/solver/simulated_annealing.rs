@@ -3,7 +3,6 @@ use rand::Rng;
 use crate::{
     solver,
     problem,
-    geo_hole_bloom,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -380,13 +379,14 @@ fn generate_vertices(
 }
 
 impl Fitness {
-    fn calc(
+    fn calc<E>(
         problem: &problem::Problem,
-        geo_hole: &geo_hole_bloom::GeoHoleBloom,
+        geo_hole: &E,
         vertices: &[problem::Point],
         use_bonus: &Option<problem::ProblemBonusType>,
     )
         -> Self
+    where E: problem::InvalidEdge,
     {
         let maybe_pose_bonus = match use_bonus {
             None =>
