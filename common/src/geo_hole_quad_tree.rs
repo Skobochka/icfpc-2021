@@ -77,7 +77,7 @@ impl GeoHoleQuadTree {
         let root = quad_tree_build(
             &problem.hole_polygon_f64(),
             problem::Point(field_min.0 - 2, field_min.1 - 2),
-            problem::Point(field_max.0 + 2, field_max.1 + 2),
+            problem::Point(field_max.0 + 3, field_max.1 + 3),
         ).ok_or(CreateError::FieldIsTooSmall)?;
 
         Ok(GeoHoleQuadTree {
@@ -94,18 +94,11 @@ impl GeoHoleQuadTree {
 
 impl problem::InvalidEdge for GeoHoleQuadTree {
     fn is_edge_invalid(&self, edge_from: problem::Point, edge_to: problem::Point) -> bool {
-        // let geo_start = geo::Coordinate {
-        //     x: if edge_from.0 < edge_to.0 { edge_from.0 as f64 } else { (edge_from.0 + 1) as f64 },
-        //     y: if edge_from.1 < edge_to.1 { edge_from.1 as f64 } else { (edge_from.1 + 1) as f64 },
-        // };
-        // let geo_end = geo::Coordinate {
-        //     x: if edge_to.0 < edge_from.0 { edge_to.0 as f64 } else { (edge_to.0 + 1) as f64 },
-        //     y: if edge_to.1 < edge_from.1 { edge_to.1 as f64 } else { (edge_to.1 + 1) as f64 },
-        // };
         let geo_start = geo::Coordinate::from(edge_from);
         let geo_end = geo::Coordinate::from(edge_to);
         let geo_edge = geo::Line { start: geo_start, end: geo_end, };
-        match quad_tree_edge_node_intersection(&self.root, &geo_edge) {
+
+        let is_invalid = match quad_tree_edge_node_intersection(&self.root, &geo_edge) {
             IntersectsNode::Outside =>
                 true,
             IntersectsNode::Inside =>
@@ -113,7 +106,12 @@ impl problem::InvalidEdge for GeoHoleQuadTree {
             IntersectsNode::DoesNot =>
             // slow path: actually check polygon
                 self.geo_hole.is_edge_invalid(edge_from, edge_to),
-        }
+        };
+        // log::debug!("is_edge_invalid({:?}) -> {:?}", geo_edge, is_invalid);
+
+        assert_eq!(is_invalid, self.geo_hole.is_edge_invalid(edge_from, edge_to));
+
+        is_invalid
     }
 }
 
@@ -139,7 +137,7 @@ impl<'a> Iterator for NodesIterator<'a> {
 }
 
 fn quad_tree_build(hole: &geo::Polygon<f64>, min: problem::Point, max: problem::Point) -> Option<Node> {
-    if min.0 > max.0 || min.1 > max.1 {
+    if min.0 >= max.0 || min.1 >= max.1 {
         return None;
     }
 
@@ -149,15 +147,15 @@ fn quad_tree_build(hole: &geo::Polygon<f64>, min: problem::Point, max: problem::
     );
     let intersection_matrix = hole.relate(&rect);
 
-    log::debug!(
-        "quad_tree_build({:?}, {:?}) | matrix = {:?}|{:?}|{:?}|{:?}",
-        min,
-        max,
-        intersection_matrix.is_intersects(),
-        intersection_matrix.is_disjoint(),
-        intersection_matrix.is_contains(),
-        intersection_matrix.is_within(),
-    );
+    // log::debug!(
+    //     "quad_tree_build({:?}, {:?}) | matrix = {:?}|{:?}|{:?}|{:?}",
+    //     min,
+    //     max,
+    //     intersection_matrix.is_intersects(),
+    //     intersection_matrix.is_disjoint(),
+    //     intersection_matrix.is_contains(),
+    //     intersection_matrix.is_within(),
+    // );
 
     if intersection_matrix.is_disjoint() {
         // log::debug!(" > NodeKind::Outside");
@@ -165,17 +163,17 @@ fn quad_tree_build(hole: &geo::Polygon<f64>, min: problem::Point, max: problem::
     } else if intersection_matrix.is_contains() {
         // log::debug!(" > NodeKind::Inside");
         Some(Node { min, max, kind: NodeKind::Inside, })
-    } else if min == max {
-        // assert!(intersection_matrix.is_intersects());
+    } else if min.0 + 1 >= max.0 && min.1 + 1 >= max.1 {
+        assert!(intersection_matrix.is_intersects());
         // Some(Node { min, max, kind: NodeKind::Inside, })
         None
     } else {
-        let center = problem::Point((max.0 + min.0) / 2, (max.1 + min.1) / 2);
+        let center = problem::Point(min.0 + ((max.0 - min.0) / 2), min.1 + ((max.1 - min.1) / 2));
         // log::debug!(" > NodeKind::Branch @ {:?} | matrix = {:?}", center, intersection_matrix);
         let children: Vec<_> = quad_tree_build(hole, min, center).into_iter()
-            .chain(quad_tree_build(hole, problem::Point(center.0 + 1, min.1), problem::Point(max.0, center.1)))
-            .chain(quad_tree_build(hole, problem::Point(min.0, center.1 + 1), problem::Point(center.0, max.1)))
-            .chain(quad_tree_build(hole, problem::Point(center.0 + 1, center.1 + 1), max))
+            .chain(quad_tree_build(hole, problem::Point(center.0, min.1), problem::Point(max.0, center.1)))
+            .chain(quad_tree_build(hole, problem::Point(min.0, center.1), problem::Point(center.0, max.1)))
+            .chain(quad_tree_build(hole, problem::Point(center.0, center.1), max))
             .collect();
         if children.is_empty() {
             None
@@ -194,7 +192,7 @@ enum IntersectsNode {
 fn quad_tree_edge_node_intersection(node: &Node, edge: &geo::Line<f64>) -> IntersectsNode {
     let rect = geo::Rect::new(
         geo::Coordinate { x: node.min.0 as f64, y: node.min.1 as f64, },
-        geo::Coordinate { x: (node.max.0 + 1) as f64, y: (node.max.1 + 1) as f64, },
+        geo::Coordinate { x: node.max.0 as f64, y: node.max.1 as f64, },
     );
     if !edge.intersects(&rect) {
         return IntersectsNode::DoesNot;
@@ -331,5 +329,18 @@ use rand::Rng;
             let test = geo_hole_quad_tree.is_edge_invalid(pa, pb);
             assert_eq!(orig, test);
         }
+    }
+
+    #[test]
+    fn manual_check_on_problem_11() {
+        let problem_data = r#"{"bonuses":[{"bonus":"BREAK_A_LEG","problem":31,"position":[5,5]},{"bonus":"GLOBALIST","problem":20,"position":[9,6]},{"bonus":"GLOBALIST","problem":49,"position":[6,9]}],"hole":[[10,0],[10,10],[0,10]],"epsilon":0,"figure":{"edges":[[0,1],[1,2],[2,0]],"vertices":[[0,0],[10,0],[10,10]]}}"#;
+        let problem: problem::Problem = serde_json::from_str(problem_data).unwrap();
+
+        let geo_hole_quad_tree = GeoHoleQuadTree::new(&problem).unwrap();
+
+        assert_eq!(geo_hole_quad_tree.is_edge_invalid(problem::Point(4, 8), problem::Point(6, 11)), true);
+        assert_eq!(geo_hole_quad_tree.is_edge_invalid(problem::Point(6, 11), problem::Point(4, 8)), true);
+        assert_eq!(geo_hole_quad_tree.is_edge_invalid(problem::Point(8, 2), problem::Point(6, 11)), true);
+        assert_eq!(geo_hole_quad_tree.is_edge_invalid(problem::Point(6, 11), problem::Point(8, 2)), true);
     }
 }

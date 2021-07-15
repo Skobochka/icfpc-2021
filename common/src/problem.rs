@@ -257,6 +257,7 @@ impl Problem {
                 edges_out_of_hole_count += 1;
             }
         }
+
         if edges_out_of_hole_count > 0 {
             return Err(PoseValidationError::EdgesNotFitHole(edges_out_of_hole_count));
         }

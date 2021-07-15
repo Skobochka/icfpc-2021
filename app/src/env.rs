@@ -43,6 +43,7 @@ pub struct Env {
     selected_angle: Option<f64>,
     solver_mode: SolverMode,
     bonus_highlight: Option<problem::ProblemId>,
+    show_coords: bool,
 }
 
 enum SolverMode {
@@ -202,6 +203,7 @@ impl Env {
             drag_state: DragState::WantVertex,
             solver_mode: SolverMode::None,
             bonus_highlight: None,
+            show_coords: true,
         })
     }
 
@@ -263,6 +265,15 @@ impl Env {
         let mut prev_point = points_iter.next()
             .ok_or(DrawError::NoPointsInHole)?;
         for point in points_iter.chain(Some(prev_point)) {
+            if self.show_coords {
+                draw_element(draw::DrawElement::Text {
+                    color: [1.0, 1.0, 1.0, 1.0],
+                    size: 16,
+                    text: format!("({}, {})", prev_point.0, prev_point.1),
+                    x: prev_point.0 as f64,
+                    y: prev_point.1 as f64,
+                });
+            }
             draw_element(draw::DrawElement::Line {
                 color: [0., 0., 1., 1.,],
                 radius: 1.0,
@@ -299,9 +310,9 @@ impl Env {
                 for node in quad_tree_nodes {
                     let color = match node.kind {
                         geo_hole_quad_tree::NodeKind::Inside =>
-                            [0., 1., 0., 0.5,],
+                            [0., 1., 0., 0.3,],
                         geo_hole_quad_tree::NodeKind::Outside =>
-                            [1., 0., 0., 0.5,],
+                            [1., 0., 0., 0.3,],
                         geo_hole_quad_tree::NodeKind::Branch { .. } =>
                             unreachable!(),
                     };
@@ -313,30 +324,30 @@ impl Env {
                         radius: 0.5,
                         source_x: node.min.0 as f64,
                         source_y: node.min.1 as f64,
-                        target_x: (node.max.0 + 1) as f64,
+                        target_x: node.max.0 as f64,
                         target_y: node.min.1 as f64,
                     });
                     draw_element(draw::DrawElement::Line {
                         color,
                         radius: 0.5,
-                        source_x: (node.max.0 + 1) as f64,
+                        source_x: node.max.0 as f64,
                         source_y: node.min.1 as f64,
-                        target_x: (node.max.0 + 1) as f64,
-                        target_y: (node.max.1 + 1) as f64,
+                        target_x: node.max.0 as f64,
+                        target_y: node.max.1 as f64,
                     });
                     draw_element(draw::DrawElement::Line {
                         color,
                         radius: 0.5,
-                        source_x: (node.max.0 + 1) as f64,
-                        source_y: (node.max.1 + 1) as f64,
+                        source_x: node.max.0 as f64,
+                        source_y: node.max.1 as f64,
                         target_x: node.min.0 as f64,
-                        target_y: (node.max.1 + 1) as f64,
+                        target_y: node.max.1 as f64,
                     });
                     draw_element(draw::DrawElement::Line {
                         color,
                         radius: 0.5,
                         source_x: node.min.0 as f64,
-                        source_y: (node.max.1 + 1) as f64,
+                        source_y: node.max.1 as f64,
                         target_x: node.min.0 as f64,
                         target_y: node.min.1 as f64,
                     });
@@ -370,6 +381,15 @@ impl Env {
                         width: 16.0,
                         height: 16.0,
                     });
+                    if self.show_coords {
+                        draw_element(draw::DrawElement::Text {
+                            color: [1.0, 0.5, 0.5, 1.0],
+                            size: 16,
+                            text: format!("({}, {})", source_point.0, source_point.1),
+                            x: source_point.0 as f64,
+                            y: source_point.1 as f64,
+                        });
+                    }
                 }
 
             },
@@ -557,6 +577,10 @@ impl Env {
         Ok(())
     }
 
+    pub fn toggle_coords(&mut self) {
+        self.show_coords = !self.show_coords;
+    }
+
     pub fn enter_solver_simulated_annealing(
         &mut self,
         operating_mode: solver::simulated_annealing::OperatingMode,
@@ -564,7 +588,8 @@ impl Env {
         -> Result<(), SimulatedAnnealingSolverError>
     {
         let solver = solver::simulated_annealing::SimulatedAnnealingSolver::new(
-            solver::Solver::with_bonus(&self.problem, Some(self.problem.export_pose()), Some(problem::ProblemBonusType::Wallhack))
+            // solver::Solver::with_bonus(&self.problem, Some(self.problem.export_pose()), Some(problem::ProblemBonusType::Wallhack))
+            solver::Solver::with_bonus(&self.problem, Some(self.problem.export_pose()), None)
                 .map_err(SimulatedAnnealingSolverError::SolverCreate)?,
             solver::simulated_annealing::Params {
                 max_temp: 100.0,

@@ -197,6 +197,9 @@ fn main() -> Result<(), Error> {
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::V), state: ButtonState::Release, .. }), _timestamp) =>
                 env.select_prev_angle(),
 
+            Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::B), state: ButtonState::Release, .. }), _timestamp) =>
+                env.toggle_coords(),
+
             Event::Input(Input::Button(ButtonArgs { button: Button::Keyboard(Key::E), state: ButtonState::Release, .. }), _timestamp) => {
                 let pose = env.export_solution();
                 pose.write_to_file(&cli_args.common.pose_file)
