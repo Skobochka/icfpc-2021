@@ -313,6 +313,8 @@ impl Env {
                             [0., 1., 0., 0.3,],
                         geo_hole_quad_tree::NodeKind::Outside =>
                             [1., 0., 0., 0.3,],
+                        geo_hole_quad_tree::NodeKind::Uncertain =>
+                            [1., 1., 0., 0.5,],
                         geo_hole_quad_tree::NodeKind::Branch { .. } =>
                             unreachable!(),
                     };
