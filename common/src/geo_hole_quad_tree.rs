@@ -12,6 +12,10 @@ use geo::{
         intersects::{
             Intersects,
         },
+        line_intersection::{
+            line_intersection,
+            LineIntersection,
+        },
     },
 };
 
@@ -21,6 +25,10 @@ use crate::{
 
 pub static HITS_TOTAL: AtomicUsize = AtomicUsize::new(0);
 pub static HITS_SLOW: AtomicUsize = AtomicUsize::new(0);
+pub static HITS_NODE_INSIDE: AtomicUsize = AtomicUsize::new(0);
+pub static HITS_NODE_OUTSIDE: AtomicUsize = AtomicUsize::new(0);
+pub static HITS_NODE_UNCERTAIN: AtomicUsize = AtomicUsize::new(0);
+pub static HITS_NODE_COND_CORNER_TOUCH: AtomicUsize = AtomicUsize::new(0);
 
 pub struct GeoHoleQuadTree {
     root: Node,
@@ -39,7 +47,13 @@ pub enum NodeKind {
     Inside,
     Outside,
     Uncertain,
+    ConditionsSet { conditions: Vec<Condition>, },
     Branch { children: Vec<Node>, },
+}
+
+#[derive(Debug)]
+pub enum Condition {
+    EdgeCornerTouch { corner: geo::Coordinate<f64>, },
 }
 
 #[derive(Debug)]
@@ -112,7 +126,7 @@ impl problem::InvalidEdge for GeoHoleQuadTree {
         let geo_end = geo::Coordinate::from(edge_to);
         let geo_edge = geo::Line { start: geo_start, end: geo_end, };
 
-        let is_invalid = match quad_tree_edge_node_intersection(&self.root, &geo_edge) {
+        let is_invalid = match quad_tree_edge_node_intersection(&self.root, geo_edge) {
             IntersectsNode::Outside =>
                 true,
             IntersectsNode::Inside =>
@@ -128,7 +142,16 @@ impl problem::InvalidEdge for GeoHoleQuadTree {
         HITS_TOTAL.fetch_add(1, atomic::Ordering::Relaxed);
         // log::debug!("is_edge_invalid({:?}) -> {:?}", geo_edge, is_invalid);
 
-        assert_eq!(is_invalid, self.geo_hole.is_edge_invalid(edge_from, edge_to));
+        // // TODO: remove check
+        // if is_invalid != self.geo_hole.is_edge_invalid(edge_from, edge_to) {
+        //     panic!(
+        //         "ensure check failed: is_invalid = {:?}, geo_hole.is_edge_invalid({:?}, {:?}) = {:?}",
+        //         is_invalid,
+        //         edge_from,
+        //         edge_to,
+        //         self.geo_hole.is_edge_invalid(edge_from, edge_to),
+        //     );
+        // }
 
         is_invalid
     }
@@ -146,7 +169,10 @@ impl<'a> Iterator for NodesIterator<'a> {
             let node = self.queue.pop()?;
 
             match &node.kind {
-                NodeKind::Inside | NodeKind::Outside | NodeKind::Uncertain =>
+                NodeKind::Inside |
+                NodeKind::Outside |
+                NodeKind::Uncertain |
+                NodeKind::ConditionsSet { .. } =>
                     return Some(node),
                 NodeKind::Branch { children, } =>
                     self.queue.extend(children.iter()),
@@ -184,7 +210,108 @@ fn quad_tree_build(hole: &geo::Polygon<f64>, min: problem::Point, max: problem::
         Some(Node { min, max, kind: NodeKind::Inside, })
     } else if min.0 + 1 >= max.0 && min.1 + 1 >= max.1 {
         assert!(intersection_matrix.is_intersects());
-        Some(Node { min, max, kind: NodeKind::Uncertain, })
+
+        // log::debug!("potentially NodeKind::Uncertain @ {:?} -- {:?}", min, max);
+
+        let node_edge_upper = geo::Line {
+            start: rect.min(),
+            end: geo::Coordinate { x: rect.max().x, y: rect.min().y, },
+        };
+        let node_edge_right = geo::Line {
+            start: geo::Coordinate { x: rect.max().x, y: rect.min().y, },
+            end: rect.max(),
+        };
+        let node_edge_bottom = geo::Line {
+            start: rect.max(),
+            end: geo::Coordinate { x: rect.min().x, y: rect.max().y, },
+        };
+        let node_edge_left = geo::Line {
+            start: geo::Coordinate { x: rect.min().x, y: rect.max().y, },
+            end: rect.min(),
+        };
+
+        let mut conditions = Vec::new();
+        let mut force_uncertain = false;
+
+        let exterior = hole.exterior();
+        let mut points_iter = exterior.points_iter();
+        let mut prev_point = points_iter.next().unwrap();
+        for point in points_iter {
+            let hole_edge = geo::Line { start: prev_point.into(), end: point.into(), };
+            prev_point = point;
+            if !hole_edge.intersects(&rect) {
+                continue;
+            }
+            // log::debug!(" > an edge intersects it: {:?}", hole_edge);
+
+            let intersects = (
+                line_intersection(hole_edge, node_edge_upper),
+                line_intersection(hole_edge, node_edge_right),
+                line_intersection(hole_edge, node_edge_bottom),
+                line_intersection(hole_edge, node_edge_left),
+            );
+
+            match intersects {
+                // touches on corner
+                (
+                    Some(LineIntersection::SinglePoint { intersection: upper, is_proper: false, }),
+                    Some(LineIntersection::SinglePoint { intersection: right, is_proper: false, }),
+                    None,
+                    None,
+                ) if upper == node_edge_upper.end && right == node_edge_right.start => {
+                    // log::debug!("  >> OUTER node with hole edge {:?} touches on upper right {:?}", hole_edge, upper);
+                    conditions.push(Condition::EdgeCornerTouch { corner: upper, });
+                },
+                (
+                    None,
+                    Some(LineIntersection::SinglePoint { intersection: right, is_proper: false, }),
+                    Some(LineIntersection::SinglePoint { intersection: bottom, is_proper: false, }),
+                    None,
+                ) if right == node_edge_right.end && bottom == node_edge_bottom.start => {
+                    // log::debug!("  >> OUTER node with hole edge {:?} touches on bottom right {:?}", hole_edge, right);
+                    conditions.push(Condition::EdgeCornerTouch { corner: right, });
+                },
+                (
+                    None,
+                    None,
+                    Some(LineIntersection::SinglePoint { intersection: bottom, is_proper: false, }),
+                    Some(LineIntersection::SinglePoint { intersection: left, is_proper: false, }),
+                ) if bottom == node_edge_bottom.end && left == node_edge_left.start => {
+                    // log::debug!("  >> OUTER node with hole edge {:?} touches on bottom left {:?}", hole_edge, bottom);
+                    conditions.push(Condition::EdgeCornerTouch { corner: bottom, });
+                },
+                (
+                    Some(LineIntersection::SinglePoint { intersection: upper, is_proper: false, }),
+                    None,
+                    None,
+                    Some(LineIntersection::SinglePoint { intersection: left, is_proper: false, }),
+                ) if left == node_edge_left.end && upper == node_edge_upper.start => {
+                    // log::debug!("  >> OUTER node with hole edge {:?} touches on upper left {:?}", hole_edge, left);
+                    conditions.push(Condition::EdgeCornerTouch { corner: left, });
+                },
+                // // touches one whole side
+                // (
+                //     Some(LineIntersection::SinglePoint { intersection: upper, is_proper: false, }),
+                //     Some(LineIntersection::Collinear { intersection: right, }),
+                //     Some(LineIntersection::SinglePoint { intersection: bottom, is_proper: false }),
+                //     None,
+                // ) if upper = node_edge_upper.end && bottom = node_edge_bottom.start =>
+                //     if hole.contains(
+
+                _other => {
+                    // log::debug!("unsupported intersection combination for hole edge {:?}: {:?}, force uncertain", hole_edge, other);
+                    force_uncertain = true;
+                    break;
+                },
+            }
+        }
+
+        if force_uncertain {
+            Some(Node { min, max, kind: NodeKind::Uncertain, })
+        } else {
+            assert!(!conditions.is_empty());
+            Some(Node { min, max, kind: NodeKind::ConditionsSet { conditions, }, })
+        }
     } else {
         let center = problem::Point(min.0 + ((max.0 - min.0) / 2), min.1 + ((max.1 - min.1) / 2));
         // log::debug!(" > NodeKind::Branch @ {:?} | matrix = {:?}", center, intersection_matrix);
@@ -208,7 +335,7 @@ enum IntersectsNode {
     Uncertain,
 }
 
-fn quad_tree_edge_node_intersection(node: &Node, edge: &geo::Line<f64>) -> IntersectsNode {
+fn quad_tree_edge_node_intersection(node: &Node, edge: geo::Line<f64>) -> IntersectsNode {
     let rect = geo::Rect::new(
         geo::Coordinate { x: node.min.0 as f64, y: node.min.1 as f64, },
         geo::Coordinate { x: node.max.0 as f64, y: node.max.1 as f64, },
@@ -216,13 +343,20 @@ fn quad_tree_edge_node_intersection(node: &Node, edge: &geo::Line<f64>) -> Inter
     if !edge.intersects(&rect) {
         return IntersectsNode::DoesNot;
     }
+
     match &node.kind {
-        NodeKind::Inside =>
-            IntersectsNode::Inside,
-        NodeKind::Outside =>
-            IntersectsNode::Outside,
-        NodeKind::Uncertain =>
-            IntersectsNode::Uncertain,
+        NodeKind::Inside => {
+            HITS_NODE_INSIDE.fetch_add(1, atomic::Ordering::Relaxed);
+            IntersectsNode::Inside
+        },
+        NodeKind::Outside => {
+            HITS_NODE_OUTSIDE.fetch_add(1, atomic::Ordering::Relaxed);
+            IntersectsNode::Outside
+        },
+        NodeKind::Uncertain => {
+            HITS_NODE_UNCERTAIN.fetch_add(1, atomic::Ordering::Relaxed);
+            IntersectsNode::Uncertain
+        },
         NodeKind::Branch { children, } => {
             let mut uncertain_hit = false;
             for child in children {
@@ -242,7 +376,83 @@ fn quad_tree_edge_node_intersection(node: &Node, edge: &geo::Line<f64>) -> Inter
             } else {
                 IntersectsNode::Inside
             }
-        }
+        },
+        NodeKind::ConditionsSet { conditions, } => {
+            let node_edge_upper = geo::Line {
+                start: rect.min(),
+                end: geo::Coordinate { x: rect.max().x, y: rect.min().y, },
+            };
+            let node_edge_right = geo::Line {
+                start: geo::Coordinate { x: rect.max().x, y: rect.min().y, },
+                end: rect.max(),
+            };
+            let node_edge_bottom = geo::Line {
+                start: rect.max(),
+                end: geo::Coordinate { x: rect.min().x, y: rect.max().y, },
+            };
+            let node_edge_left = geo::Line {
+                start: geo::Coordinate { x: rect.min().x, y: rect.max().y, },
+                end: rect.min(),
+            };
+
+            let intersects = (
+                line_intersection(edge, node_edge_upper),
+                line_intersection(edge, node_edge_right),
+                line_intersection(edge, node_edge_bottom),
+                line_intersection(edge, node_edge_left),
+            );
+
+            for condition in conditions {
+                match condition {
+
+                    &Condition::EdgeCornerTouch { corner, } =>
+                        match intersects {
+                            // touches on corner
+                            (
+                                Some(LineIntersection::SinglePoint { intersection: upper, is_proper: false, }),
+                                Some(LineIntersection::SinglePoint { intersection: right, is_proper: false, }),
+                                None,
+                                None,
+                            ) if upper == corner && upper == node_edge_upper.end && right == node_edge_right.start => {
+                                HITS_NODE_COND_CORNER_TOUCH.fetch_add(1, atomic::Ordering::Relaxed);
+                                return IntersectsNode::Inside;
+                            },
+                            (
+                                None,
+                                Some(LineIntersection::SinglePoint { intersection: right, is_proper: false, }),
+                                Some(LineIntersection::SinglePoint { intersection: bottom, is_proper: false, }),
+                                None,
+                            ) if right == corner && right == node_edge_right.end && bottom == node_edge_bottom.start => {
+                                HITS_NODE_COND_CORNER_TOUCH.fetch_add(1, atomic::Ordering::Relaxed);
+                                return IntersectsNode::Inside
+                            },
+                            (
+                                None,
+                                None,
+                                Some(LineIntersection::SinglePoint { intersection: bottom, is_proper: false, }),
+                                Some(LineIntersection::SinglePoint { intersection: left, is_proper: false, }),
+                            ) if bottom == corner && bottom == node_edge_bottom.end && left == node_edge_left.start => {
+                                HITS_NODE_COND_CORNER_TOUCH.fetch_add(1, atomic::Ordering::Relaxed);
+                                return IntersectsNode::Inside
+                            },
+                            (
+                                Some(LineIntersection::SinglePoint { intersection: upper, is_proper: false, }),
+                                None,
+                                None,
+                                Some(LineIntersection::SinglePoint { intersection: left, is_proper: false, }),
+                            ) if left == corner && left == node_edge_left.end && upper == node_edge_upper.start => {
+                                HITS_NODE_COND_CORNER_TOUCH.fetch_add(1, atomic::Ordering::Relaxed);
+                                return IntersectsNode::Inside
+                            },
+                            _ =>
+                                (),
+                        },
+
+                }
+            }
+
+            IntersectsNode::Outside
+        },
     }
 }
 

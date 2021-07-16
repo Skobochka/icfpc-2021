@@ -39,7 +39,7 @@ pub struct SimulatedAnnealingSolver {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Fitness {
-    FigureCorrupted { ratio_avg: f64, },
+    FigureCorrupted { ratio_avg: f64, broken_edges_count: usize, },
     NotFitHole { bad_edges_count: usize, },
     FigureScored { score: i64, },
 }
@@ -410,9 +410,9 @@ impl Fitness {
                 Fitness::FigureScored { score, },
             Err(problem::PoseValidationError::VerticeCountMismatch) =>
                 panic!("unexpected PoseValidationError::VerticeCountMismatch on vertices_cur.len() = {}", vertices.len()),
-            Err(problem::PoseValidationError::BrokenEdgesFound { ratio_sum, .. }) => {
+            Err(problem::PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges_count, }) => {
                 let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
-                Fitness::FigureCorrupted { ratio_avg, }
+                Fitness::FigureCorrupted { ratio_avg, broken_edges_count, }
             },
             Err(problem::PoseValidationError::EdgesNotFitHole(not_fit_edges)) =>
                 Fitness::NotFitHole { bad_edges_count: not_fit_edges, },
@@ -425,14 +425,21 @@ impl Fitness {
                 0.0,
             &Fitness::FigureScored { score, } =>
                 2.0 - (1.0 / score as f64),
-            &Fitness::FigureCorrupted { ratio_avg, } =>
-                if ratio_avg < 1.0 {
+            &Fitness::FigureCorrupted { ratio_avg, broken_edges_count, } => {
+                let ratio_energy = if ratio_avg < 1.0 {
                     2.0 + ratio_avg
                 } else {
                     4.0 - (1.0 / ratio_avg)
-                },
+                };
+                let broken_edges_count_energy = if broken_edges_count == 0 {
+                    0.0
+                } else {
+                    10.0 - (6.0 / broken_edges_count as f64)
+                };
+                ratio_energy + broken_edges_count_energy
+            },
             &Fitness::NotFitHole { bad_edges_count, } =>
-                4.0 + bad_edges_count as f64, // / problem.figure.edges.len() as f64),
+                15.0 + bad_edges_count as f64, // / problem.figure.edges.len() as f64),
         }
     }
 }

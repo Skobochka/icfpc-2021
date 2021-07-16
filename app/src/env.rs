@@ -310,11 +310,13 @@ impl Env {
                 for node in quad_tree_nodes {
                     let color = match node.kind {
                         geo_hole_quad_tree::NodeKind::Inside =>
-                            [0., 1., 0., 0.3,],
+                            [0.0, 1.0, 0.0, 0.3,],
                         geo_hole_quad_tree::NodeKind::Outside =>
-                            [1., 0., 0., 0.3,],
+                            [1.0, 0.0, 0.0, 0.3,],
                         geo_hole_quad_tree::NodeKind::Uncertain =>
-                            [1., 1., 0., 0.5,],
+                            [1.0, 1.0, 0.0, 0.5,],
+                        geo_hole_quad_tree::NodeKind::ConditionsSet { .. } =>
+                            [0.2, 1.0, 0.6, 1.0,],
                         geo_hole_quad_tree::NodeKind::Branch { .. } =>
                             unreachable!(),
                     };
@@ -353,6 +355,31 @@ impl Env {
                         target_x: node.min.0 as f64,
                         target_y: node.min.1 as f64,
                     });
+
+                    if let geo_hole_quad_tree::NodeKind::ConditionsSet { conditions, } = &node.kind {
+                        for condition in conditions {
+                            match condition {
+                                geo_hole_quad_tree::Condition::EdgeCornerTouch { corner, } =>
+                                    draw_element(draw::DrawElement::Ellipse {
+                                        color: [1.0, 0.0, 0.0, 0.25],
+                                        x: corner.x,
+                                        y: corner.y,
+                                        width: 8.0,
+                                        height: 8.0,
+                                    }),
+                            }
+                        }
+                    }
+
+                    if self.show_coords {
+                        draw_element(draw::DrawElement::Text {
+                            color: [1.0, 1.0, 1.0, 0.5],
+                            size: 12,
+                            text: format!("({}, {})-({}, {})", node.min.0, node.min.1, node.max.0, node.max.1),
+                            x: node.min.0 as f64,
+                            y: node.min.1 as f64,
+                        });
+                    }
                 }
 
                 let solver_vertices = solver.vertices();
