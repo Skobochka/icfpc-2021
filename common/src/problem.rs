@@ -111,7 +111,7 @@ pub enum WriteFileError {
 #[derive(Debug, PartialEq)]
 pub enum PoseValidationError {
     VerticeCountMismatch,
-    BrokenEdgesFound { ratio_sum: f64, broken_edges_count: usize, },
+    BrokenEdgesFound { ratio_sum: f64, ratio_max: f64, broken_edges_count: usize, },
     EdgesNotFitHole(usize),
 }
 
@@ -162,24 +162,28 @@ impl Problem {
 
     pub fn score_vertices_check_stretching(&self,
                                            pose_vertices: &[Point],
-                                           bonus: Option<PoseBonus>) -> Result<f64, PoseValidationError> {
+                                           bonus: Option<PoseBonus>) -> Result<(f64, f64), PoseValidationError> {
         match bonus {
             Some(PoseBonus::Globalist { .. }) => {
                 // Check stretching
                 let mut ratio_sum = 0.0;
+                let mut ratio_max = 0.0;
                 for &Edge(from_idx, to_idx) in &self.figure.edges {
                     let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
                     let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
 
                     let ratio = ((d_after as f64) / (d_before as f64) - 1_f64).abs();
                     ratio_sum += ratio;
+                    if ratio > ratio_max {
+                        ratio_max = ratio;
+                    }
                 }
 
                 if ratio_sum > (self.figure.edges.len() as f64 * self.epsilon as f64) / 1000000_f64 {
-                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges_count: 0, });
+                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, ratio_max, broken_edges_count: 0, });
                 }
 
-                Ok(ratio_sum)
+                Ok((ratio_sum, ratio_max))
             }
             Some(PoseBonus::BreakALeg { .. }) => {
                 unimplemented!("BREAK_A_LEG is not supported yet");
@@ -192,12 +196,16 @@ impl Problem {
                     _ => 0,
                 };
                 let mut ratio_sum = 0.0;
+                let mut ratio_max = 0.0;
                 for &Edge(from_idx, to_idx) in &self.figure.edges {
                     let d_before = distance(&self.figure.vertices[from_idx], &self.figure.vertices[to_idx]);
                     let d_after = distance(&pose_vertices[from_idx], &pose_vertices[to_idx]);
 
                     let ratio = ((d_after as f64) / (d_before as f64) - 1_f64).abs();
                     ratio_sum += ratio;
+                    if ratio > ratio_max {
+                        ratio_max = ratio;
+                    }
                     if ratio > self.epsilon as f64 / 1000000_f64 {
                         if allow_broken > 0 {
                             allow_broken -= 1;
@@ -208,10 +216,10 @@ impl Problem {
                     }
                 }
                 if broken_edges_count > 0 {
-                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, broken_edges_count, });
+                    return Err(PoseValidationError::BrokenEdgesFound { ratio_sum, ratio_max, broken_edges_count, });
                 }
 
-                Ok(ratio_sum)
+                Ok((ratio_sum, ratio_max))
             }
         }
     }

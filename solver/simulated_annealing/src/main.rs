@@ -191,7 +191,7 @@ fn main() -> Result<(), Error> {
         }
 
         if dump_delay_start.elapsed().as_secs() > 120 {
-            log::debug!("temp: {}, fitness: {:?}", solver.temp(), solver.fitness());
+            log::debug!("temp: {}, fitness: {:?}, energy: {:?}", solver.temp(), solver.fitness(), solver.fitness().energy());
             log::debug!("HITS_TOTAL = {}", common::geo_hole_quad_tree::HITS_TOTAL.load(std::sync::atomic::Ordering::Relaxed));
             log::debug!("HITS_SLOW = {}", common::geo_hole_quad_tree::HITS_SLOW.load(std::sync::atomic::Ordering::Relaxed));
             log::debug!("HITS_NODE_INSIDE = {}", common::geo_hole_quad_tree::HITS_NODE_INSIDE.load(std::sync::atomic::Ordering::Relaxed));
