@@ -39,8 +39,8 @@ pub struct SimulatedAnnealingSolver {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Fitness {
-    FigureCorrupted { ratio_avg: f64, ratio_max: f64, broken_edges_count: usize, },
-    NotFitHole { bad_edges_count: usize, },
+    FigureCorrupted { ratio_avg: f64, ratio_max: f64, broken_edges_count: usize, total_edges: usize, },
+    NotFitHole { bad_edges_count: usize, total_edges: usize, },
     FigureScored { score: i64, },
 }
 
@@ -236,9 +236,11 @@ impl SimulatedAnnealingSolver {
                 let fitness_tmp = Fitness::calc(&self.solver.problem, &self.solver.geo_hole, &self.vertices_tmp, &self.solver.use_bonus);
 
                 let energy_cur = self.fitness_cur.energy();
-                let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+                // let q_cur = energy_cur * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+                let q_cur = energy_cur;
                 let energy_tmp = fitness_tmp.energy();
-                let q_tmp = energy_tmp * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+                // let q_tmp = energy_tmp * self.params.max_temp * self.solver.problem.figure.edges.len() as f64;
+                let q_tmp = energy_tmp;
 
                 let accept_prob = if q_tmp < q_cur {
                     1.0
@@ -414,10 +416,18 @@ impl Fitness {
                 panic!("unexpected PoseValidationError::VerticeCountMismatch on vertices_cur.len() = {}", vertices.len()),
             Err(problem::PoseValidationError::BrokenEdgesFound { ratio_sum, ratio_max, broken_edges_count, }) => {
                 let ratio_avg = ratio_sum / problem.figure.edges.len() as f64;
-                Fitness::FigureCorrupted { ratio_avg, ratio_max, broken_edges_count, }
+                Fitness::FigureCorrupted {
+                    ratio_avg,
+                    ratio_max,
+                    broken_edges_count,
+                    total_edges: problem.figure.edges.len(),
+                }
             },
             Err(problem::PoseValidationError::EdgesNotFitHole(not_fit_edges)) =>
-                Fitness::NotFitHole { bad_edges_count: not_fit_edges, },
+                Fitness::NotFitHole {
+                    bad_edges_count: not_fit_edges,
+                    total_edges: problem.figure.edges.len(),
+                },
         }
     }
 
@@ -449,10 +459,10 @@ impl Fitness {
 
     pub fn energy(&self) -> f64 {
         let score_scale_max = 100.0;
-        let ratio_avg_scale_max = 35.0;
-        let ratio_max_scale_max = 45.0;
-        let broken_edges_count_scale_max = 60.0;
-        let bad_edges_count_scale_max = 85.0;
+        let ratio_avg_scale_max = 8.0;
+        let ratio_max_scale_max = 10.0;
+        let broken_edges_count_scale_max = 30.0;
+        let bad_edges_count_scale_max = 50.0;
         let (score, ratio_avg, ratio_max, broken_edges_count, bad_edges_count) = match self {
             &Fitness::FigureScored { score, } if score == 0 =>
                 (0.0, 0.0, 0.0, 0.0, 0.0),
@@ -460,21 +470,21 @@ impl Fitness {
                 let score_scaled = 1.0 + score_scale_max - (score_scale_max / score as f64);
                 (score_scaled, 1.0, 1.0, 1.0, 1.0)
             },
-            &Fitness::FigureCorrupted { ratio_avg, ratio_max, broken_edges_count, } =>
+            &Fitness::FigureCorrupted { ratio_avg, ratio_max, broken_edges_count, total_edges, } =>
                 (
                     1.0 + score_scale_max,
-                    1.0 + ratio_avg_scale_max - (ratio_avg_scale_max / (ratio_avg + 1.0)),
-                    1.0 + ratio_max_scale_max - (ratio_max_scale_max / (ratio_max + 1.0)),
-                    1.0 + broken_edges_count_scale_max - (broken_edges_count_scale_max / (broken_edges_count as f64 + 1.0)),
+                    1.0 + ratio_avg_scale_max - (ratio_avg_scale_max / (ratio_avg + 2.72).ln()),
+                    1.0 + ratio_max_scale_max - (ratio_max_scale_max / (ratio_max + 2.72).ln()),
+                    1.0 + ((broken_edges_count as f64) * broken_edges_count_scale_max / (total_edges as f64 + 1.0)),
                     1.0,
                 ),
-            &Fitness::NotFitHole { bad_edges_count, } =>
+            &Fitness::NotFitHole { bad_edges_count, total_edges, } =>
                 (
                     1.0 + score_scale_max,
                     1.0 + ratio_avg_scale_max,
                     1.0 + ratio_max_scale_max,
                     1.0 + broken_edges_count_scale_max,
-                    1.0 + bad_edges_count_scale_max - (bad_edges_count_scale_max / (bad_edges_count as f64 + 1.0)),
+                    1.0 + ((bad_edges_count as f64) * bad_edges_count_scale_max / (total_edges as f64 + 1.0)),
                 ),
         };
 
